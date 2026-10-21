@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.1.2]
+
+Settings opens reliably, the overlay can be moved anywhere, and clicking away always hides it.
+
+**Downloads**
+
+- `Quota_0.1.2_x64-setup.exe`: installer for Windows 10/11 (per-user, no admin needed). Recommended.
+- `Quota_0.1.2_x64-portable.exe`: a single executable. Needs WebView2, which Windows 11 and most
+  Windows 10 PCs already have.
+- `SHA256SUMS.txt`: checksums for both.
+
+The builds aren't code-signed yet, so Windows SmartScreen may warn on first run: choose
+*More info* → *Run anyway*.
+
+**New**
+
+- Drag the overlay anywhere by any empty area. It reopens in the same spot, on the same
+  monitor, even after a restart. Settings → General → Position → *Reset* puts it back.
+
+**Fixes**
+
+- Opening Settings could freeze Quota on Windows: the window was created on the main thread,
+  which WebView2 doesn't allow. Settings now opens from the overlay and the tray every time.
+- The Settings window and the overlay could stay invisible if their page loaded while hidden.
+  Both now always appear.
+- Clicking outside the overlay now hides it even when Windows hadn't given it focus (for
+  example right after Quota starts).
+
 ## [0.1.1]
 
 Accuracy fixes, found by checking Quota against the real Codex app-server and Anthropic's
