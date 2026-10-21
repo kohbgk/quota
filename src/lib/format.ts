@@ -130,6 +130,15 @@ export function shortcutKeys(shortcut: string): string[] {
     .map((k) => names[k] ?? k.replace(/^Numpad/, "Num "));
 }
 
+/** Shortens a long path in the middle so the drive and the file name stay visible. */
+export function shortenPath(path: string, max = 56): string {
+  if (path.length <= max) return path;
+  const sep = path.includes("\\") ? "\\" : "/";
+  const parts = path.split(/[\\/]/);
+  if (parts.length < 6) return path;
+  return [...parts.slice(0, 3), "…", ...parts.slice(-2)].join(sep);
+}
+
 export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }

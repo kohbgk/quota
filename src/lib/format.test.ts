@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAgo, formatDuration, formatReset, levelFor, planLabel, remainingPercent, shortcutKeys, inlineCode } from "./format";
+import { formatAgo, formatDuration, formatReset, levelFor, planLabel, remainingPercent, shortcutKeys, shortenPath, inlineCode } from "./format";
 import { recordKey } from "./keys";
 
 const key = (code: string, mods: Partial<{ ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean }> = {}) => ({
@@ -93,5 +93,14 @@ describe("shortcut recording", () => {
     expect(recordKey(key("KeyA")).kind).toBe("invalid");
     expect(recordKey(key("KeyA", { shiftKey: true })).kind).toBe("invalid");
     expect(recordKey(key("IntlRo", { ctrlKey: true })).kind).toBe("invalid");
+  });
+});
+
+describe("shortenPath", () => {
+  it("keeps short paths and elides the middle of long ones", () => {
+    expect(shortenPath("C:\\Tools\\codex.exe")).toBe("C:\\Tools\\codex.exe");
+    expect(
+      shortenPath("C:\\Users\\you\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\vendor\\x86_64-pc-windows-msvc\\codex\\codex.exe"),
+    ).toBe("C:\\Users\\you\\…\\codex\\codex.exe");
   });
 });

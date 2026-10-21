@@ -2,7 +2,7 @@ import "./styles/tokens.css";
 import "./styles/settings.css";
 
 import { api, errorText } from "./lib/api";
-import { escapeHtml, planLabel, shortcutKeys } from "./lib/format";
+import { escapeHtml, planLabel, shortcutKeys, shortenPath } from "./lib/format";
 import { icons, logo } from "./lib/icons";
 import { recordKey } from "./lib/keys";
 import { setTheme } from "./lib/theme";
@@ -165,7 +165,7 @@ function statusOf(p: ProviderState | undefined): { text: string; tone: "ok" | "w
   const s = p.status;
   switch (s.kind) {
     case "ready": {
-      const plan = planLabel(p.usage?.plan);
+      const plan = p.usage?.source === "claudeStatusLine" ? "Status line" : planLabel(p.usage?.plan);
       return { text: plan ? `Connected · ${plan}` : "Connected", tone: "ok" };
     }
     case "notInstalled":
@@ -233,8 +233,9 @@ function render() {
   desc.classList.toggle("error", !recording && Boolean(error));
 
   // Codex
+  $("codexPath").title = details?.codexPath ?? "";
   $("codexPath").textContent = details?.codexPath
-    ? `${s.codexPath ? "Using" : "Found"} ${details.codexPath}`
+    ? `${s.codexPath ? "Using" : "Found"} ${shortenPath(details.codexPath)}`
     : details
       ? "Codex wasn't found in the usual install locations."
       : "";
