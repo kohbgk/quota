@@ -1,6 +1,6 @@
 [package]
 name = "quota"
-version = "0.1.0"
+version = "0.1.1"
 description = "Your AI usage. One shortcut away."
 authors = ["kohbgk"]
 license = "MIT"

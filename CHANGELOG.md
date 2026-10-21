@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.1.1]
+
+Accuracy fixes, found by checking Quota against the real Codex app-server and Anthropic's
+current status line documentation.
+
+**Downloads**
+
+- `Quota_0.1.1_x64-setup.exe`: installer for Windows 10/11 (per-user, no admin needed). Recommended.
+- `Quota_0.1.1_x64-portable.exe`: a single executable. Needs WebView2, which Windows 11 and most
+  Windows 10 PCs already have.
+- `SHA256SUMS.txt`: checksums for both.
+
+The builds aren't code-signed yet, so Windows SmartScreen may warn on first run: choose
+*More info* → *Run anyway*.
+
+**Fixes**
+
+- The tray tooltip and the Claude Code status line rounded the remaining percentage to the
+  nearest whole number, so they could show 1% more than you have. They now round down, like
+  the overlay.
+- When a Claude Code limit resets, the status line bridge no longer reports that limit as
+  "Not reported". It now shows "Reset since last update" until fresh numbers arrive.
+- Any limit past its reset time now shows as reset, never with its old numbers.
+- When Codex reports that included usage isn't currently allowed for your account, Quota says
+  so instead of letting the percentages suggest otherwise.
+- Clearer plan badges for Codex's newer plan types (for example "Business" and "Enterprise"
+  instead of raw IDs).
+- The tray tooltip shows the weekly limit when a plan has no 5-hour limit, and says when a limit
+  has reset.
+
 ## [0.1.0]
 
 The first release of Quota: your Codex and Claude Code subscription usage, one shortcut away.
