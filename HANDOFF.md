@@ -61,7 +61,7 @@ src/
 ## Status
 
 Done and verified on Linux:
-- Rust: builds with zero warnings, clippy clean, **41 unit tests pass** (+2 opt-in live tests, `--ignored`).
+- Rust: builds with zero warnings, clippy clean, **46 unit tests pass** (+2 opt-in live tests, `--ignored`).
 - Frontend: `tsc` clean, **29 vitest tests pass**, production build OK.
 - UI reviewed via headless-Chromium screenshots of ~15 overlay states + settings (dark/light).
 - Windows CI green (typecheck, vitest, clippy -D warnings, cargo test, tauri build): https://github.com/kohbgk/quota/actions
@@ -99,6 +99,23 @@ Later in session 2, the integrations were checked against reality and **v0.1.1**
 - Fixed: the tray and status line rounded remaining % to nearest (overstated by up to 1%); all
   surfaces now use the round-down `remaining_percent()`.
 - Codex `ordinaryUsageAllowed: false` is surfaced as "Included usage isn't available right now".
+
+**v0.1.2** (user reported: Settings did nothing and the app froze; wanted a movable overlay
+that remembers its spot; click away must hide):
+- Root cause: `WebviewWindowBuilder::build()` on the main thread (sync command + tray menu
+  handler) deadlocks WebView2. Settings is now built on a worker thread (`overlay::open_settings`).
+- Hidden windows get no `requestAnimationFrame`; the pages' ready/show signals now use
+  `afterRender` (src/lib/frame.ts) with a timer fallback, plus a Rust fallback show for Settings.
+- Drag: JS starts `start_overlay_drag` after 4px of movement. The spot is saved as
+  `Settings.overlay_position` (work-area fractions + monitor name) once moves settle, and on
+  hide/quit. Settings > General > Position > Reset.
+- Click away: on Windows a watcher thread (GetAsyncKeyState) hides on a mouse press outside the
+  overlay while it's open, since focus events miss clicks when the overlay never got focus.
+- The real app runs headless for testing: `apt install xvfb openbox xdotool dbus-x11`, run
+  `npx vite` and `Xvfb :99` + `openbox`, then start `target/debug/quota` under
+  `dbus-run-session` with `WEBKIT_DISABLE_COMPOSITING_MODE=1` and a throwaway
+  `HOME`/`XDG_CONFIG_HOME`. Drive it with xdotool. Linux-only quirk: the global shortcut doesn't
+  hide the overlay while it has keyboard focus under X11 (Windows uses RegisterHotKey).
 
 Remaining:
 
