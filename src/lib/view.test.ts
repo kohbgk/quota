@@ -123,6 +123,23 @@ describe("overlay view model", () => {
     expect(vm.cards[0]!.rows[0]).toMatchObject({ kind: "value", remaining: 100, reset: "Starts with your next request" });
   });
 
+  it("says when a limit is used up", () => {
+    const vm = buildOverlay(snap([p("codex", { kind: "ready" }, usage(100, 10)), ready()[1]!]), NOW);
+    expect(vm.cards[0]!.rows[0]).toMatchObject({ kind: "value", remaining: 0, reset: "Limit reached · resets in 1h" });
+    expect(vm.cards[0]!.rows[1]).toMatchObject({ reset: expect.stringMatching(/^Resets /) });
+  });
+
+  it("falls back to the oldest shown data for the footer when nothing is current", () => {
+    const vm = buildOverlay(
+      snap([
+        p("codex", { kind: "error", message: "offline" }, usage(28, 55, 2 * 3_600_000)),
+        p("claude", { kind: "rateLimited", retryAt: NOW + 60_000 }, usage(62, 19, 9 * 60_000)),
+      ]),
+      NOW,
+    );
+    expect(vm.updated).toBe("Updated 2h ago");
+  });
+
   it("tags status line data with its source", () => {
     const u = { ...usage(30, 30), plan: null, source: "claudeStatusLine" as const };
     const vm = buildOverlay(snap([ready()[0]!, p("claude", { kind: "ready" }, u)]), NOW);

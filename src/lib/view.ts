@@ -84,6 +84,7 @@ function rowFor(key: WindowKey, window: LimitWindow | null, usage: Usage, id: Pr
   } else {
     reset = "Reset time not reported";
   }
+  if (remaining === 0) reset = `Limit reached · ${reset[0]!.toLowerCase()}${reset.slice(1)}`;
   return { key, label, kind: "value", remaining, level: levelFor(remaining), reset, resetTitle };
 }
 
@@ -216,9 +217,11 @@ export function buildOverlay(snapshot: AppSnapshot, now: number): OverlayVM {
   const providers = visibleProviders(snapshot);
   const cards = providers.map((p) => cardFor(p, snapshot, now));
   const refreshing = providers.some((p) => p.refreshing);
-  const times = providers
-    .filter((p) => p.usage && p.status.kind === "ready")
-    .map((p) => p.usage!.fetchedAt);
+  const fetchedAt = (pred: (p: ProviderState) => boolean) =>
+    providers.filter((p) => p.usage && pred(p)).map((p) => p.usage!.fetchedAt);
+  // Prefer current data; otherwise report the oldest data still on screen.
+  let times = fetchedAt((p) => p.status.kind === "ready");
+  if (!times.length) times = fetchedAt((p) => KEEP_DATA.has(p.status.kind));
   let updated = "";
   if (refreshing) updated = "Refreshing…";
   else if (times.length) updated = `Updated ${formatAgo(Math.min(...times), now)}`;

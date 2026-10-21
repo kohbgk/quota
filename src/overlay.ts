@@ -162,7 +162,6 @@ function fillCard(el: HTMLElement, card: CardVM) {
 }
 
 function renderBanners(s: AppSnapshot) {
-  const keys = shortcutKeys(s.settings.shortcut).map((k) => `<kbd>${escapeHtml(k)}</kbd>`).join("");
   const parts: string[] = [];
   if (s.shortcutError) {
     parts.push(`
@@ -173,7 +172,7 @@ function renderBanners(s: AppSnapshot) {
   } else if (s.firstRun && !hintDismissed) {
     parts.push(`
       <div class="banner">${icons.keyboard}
-        <p>Quota runs in your system tray. Press ${keys} anytime to show or hide it.</p>
+        <p>Quota keeps running in your tray. Use the shortcut below anytime.</p>
         <button class="link" data-cmd="dismiss-hint">Got it</button>
       </div>`);
   }
