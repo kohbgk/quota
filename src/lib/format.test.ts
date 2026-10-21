@@ -61,7 +61,11 @@ describe("labels", () => {
   it("names plans", () => {
     expect(planLabel("plus")).toBe("Plus");
     expect(planLabel("PRO")).toBe("Pro");
-    expect(planLabel("self_serve_business")).toBe("Self Serve Business");
+    expect(planLabel("self_serve_business_usage_based")).toBe("Business");
+    expect(planLabel("enterprise_cbp_automation")).toBe("Enterprise");
+    expect(planLabel("ent26")).toBe("Enterprise");
+    expect(planLabel("prolite")).toBe("Pro Lite");
+    expect(planLabel("edu_plus")).toBe("Edu Plus");
     expect(planLabel(null)).toBeNull();
     expect(planLabel("unknown")).toBeNull();
   });

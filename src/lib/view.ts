@@ -60,7 +60,7 @@ export function staleAfterMs(settings: Settings): number {
   return Math.max(15, interval * 3) * 60_000;
 }
 
-function rowFor(key: WindowKey, window: LimitWindow | null, usage: Usage, id: ProviderId, now: number): RowVM {
+function rowFor(key: WindowKey, window: LimitWindow | null, id: ProviderId, now: number): RowVM {
   const label = LABELS[key];
   if (!window) {
     return {
@@ -70,7 +70,9 @@ function rowFor(key: WindowKey, window: LimitWindow | null, usage: Usage, id: Pr
       note: id === "codex" && key === "fiveHour" ? "Not reported for this plan" : "Not reported",
     };
   }
-  if (window.resetsAt !== null && window.resetsAt * 1000 <= now && usage.fetchedAt < window.resetsAt * 1000) {
+  // Past its reset time, a window's numbers are out of date however recently they were fetched
+  // (Claude Code's status line stops reporting a window once it resets).
+  if (window.resetsAt !== null && window.resetsAt * 1000 <= now) {
     return { key, label, kind: "reset", note: "Reset since last update" };
   }
   const remaining = remainingPercent(window.usedPercent);
@@ -184,7 +186,7 @@ export function cardFor(p: ProviderState, snapshot: AppSnapshot, now: number): C
   }
 
   const { badge, title } = sourceBadge(usage);
-  const rows = windows.map((key) => rowFor(key, usage[key], usage, p.id, now));
+  const rows = windows.map((key) => rowFor(key, usage[key], p.id, now));
   const age = now - usage.fetchedAt;
   let notice: CardVM["notice"] = null;
   let dim = false;
@@ -208,6 +210,8 @@ export function cardFor(p: ProviderState, snapshot: AppSnapshot, now: number): C
       if (age > staleAfterMs(snapshot.settings)) {
         notice = { tone: "muted", text: `Last updated ${formatAgo(usage.fetchedAt, now)}` };
         dim = true;
+      } else if (usage.blocked) {
+        notice = { tone: "warn", text: "Included usage isn't available right now" };
       }
   }
   return { ...base, badge, badgeTitle: title, rows, notice, dim };

@@ -85,12 +85,17 @@ const PLAN_NAMES: Record<string, string> = {
   business: "Business",
   enterprise: "Enterprise",
   edu: "Edu",
+  prolite: "Pro Lite",
+  promax: "Pro Max",
 };
 
 export function planLabel(plan: string | null | undefined): string | null {
   if (!plan) return null;
   const key = plan.trim().toLowerCase();
   if (!key || key === "unknown") return null;
+  // Billing variants ("self_serve_business_usage_based", "ent26", …) badge as their family.
+  if (key.includes("business")) return "Business";
+  if (key.startsWith("enterprise") || /^ent\d+$/.test(key)) return "Enterprise";
   return (
     PLAN_NAMES[key] ??
     key

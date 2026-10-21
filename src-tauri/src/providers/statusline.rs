@@ -14,7 +14,7 @@ use serde_json::{Map, Value};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use crate::model::{LimitWindow, Usage, UsageSource};
+use crate::model::{remaining_percent, LimitWindow, Usage, UsageSource};
 use crate::paths;
 
 pub const BRIDGE_FLAG: &str = "--quota-statusline";
@@ -45,6 +45,7 @@ impl Snapshot {
             plan: None,
             source: UsageSource::ClaudeStatusLine,
             fetched_at: self.captured_at,
+            blocked: false,
         })
     }
 }
@@ -72,8 +73,29 @@ pub fn snapshot_from_input(input: &Value, now_ms: i64) -> Option<Snapshot> {
     (snapshot.five_hour.is_some() || snapshot.seven_day.is_some()).then_some(snapshot)
 }
 
+impl SnapshotWindow {
+    fn has_reset(&self, now_ms: i64) -> bool {
+        self.resets_at.is_some_and(|at| at.saturating_mul(1000) <= now_ms)
+    }
+}
+
+/// Claude Code drops a window from `rate_limits` once its `resets_at` passes.
+/// Keep the previously recorded window in that case, so Quota can say it reset
+/// instead of claiming the window isn't reported.
+fn carry_reset_windows(mut snapshot: Snapshot, previous: Option<Snapshot>, now_ms: i64) -> Snapshot {
+    let Some(previous) = previous else { return snapshot };
+    let carry = |new: &mut Option<SnapshotWindow>, old: Option<SnapshotWindow>| {
+        if new.is_none() {
+            *new = old.filter(|w| w.has_reset(now_ms));
+        }
+    };
+    carry(&mut snapshot.five_hour, previous.five_hour);
+    carry(&mut snapshot.seven_day, previous.seven_day);
+    snapshot
+}
+
 /// The single line printed back to Claude Code.
-pub fn render_line(input: &Value, snapshot: Option<&Snapshot>) -> String {
+pub fn render_line(input: &Value, snapshot: Option<&Snapshot>, now_ms: i64) -> String {
     let model = input
         .get("model")
         .and_then(|m| m.get("display_name"))
@@ -81,12 +103,12 @@ pub fn render_line(input: &Value, snapshot: Option<&Snapshot>) -> String {
         .unwrap_or("Claude");
     let mut parts = vec![model.to_string()];
     if let Some(s) = snapshot {
-        let left = |w: &SnapshotWindow| (100.0 - w.used_percentage).clamp(0.0, 100.0).round() as i64;
-        if let Some(w) = &s.five_hour {
-            parts.push(format!("5h {}% left", left(w)));
-        }
-        if let Some(w) = &s.seven_day {
-            parts.push(format!("week {}% left", left(w)));
+        for (label, window) in [("5h", &s.five_hour), ("week", &s.seven_day)] {
+            match window {
+                Some(w) if w.has_reset(now_ms) => parts.push(format!("{label} reset")),
+                Some(w) => parts.push(format!("{label} {}% left", remaining_percent(w.used_percentage))),
+                None => {}
+            }
         }
     }
     parts.join(" · ")
@@ -98,13 +120,14 @@ pub fn run_bridge(stdin: &mut impl Read, stdout: &mut impl Write, snapshot_path:
     let mut raw = Vec::new();
     let _ = stdin.take(1024 * 1024).read_to_end(&mut raw);
     let input: Value = serde_json::from_slice(&raw).unwrap_or(Value::Null);
-    let snapshot = snapshot_from_input(&input, now_ms);
+    let snapshot = snapshot_from_input(&input, now_ms)
+        .map(|s| carry_reset_windows(s, read_snapshot(snapshot_path), now_ms));
     if let Some(snapshot) = &snapshot {
         if let Ok(json) = serde_json::to_vec(snapshot) {
             let _ = paths::write_atomic(snapshot_path, &json);
         }
     }
-    let _ = writeln!(stdout, "{}", render_line(&input, snapshot.as_ref()));
+    let _ = writeln!(stdout, "{}", render_line(&input, snapshot.as_ref(), now_ms));
     let _ = stdout.flush();
 }
 
@@ -244,7 +267,7 @@ mod tests {
         let mut out = Vec::new();
         run_bridge(&mut stdin.as_slice(), &mut out, &snapshot_path, 99);
         stdin.clear();
-        assert_eq!(String::from_utf8(out).unwrap(), "Opus · 5h 77% left · week 59% left\n");
+        assert_eq!(String::from_utf8(out).unwrap(), "Opus · 5h 76% left · week 58% left\n");
         let snap = read_snapshot(&snapshot_path).unwrap();
         assert_eq!(snap.captured_at, 99);
         let usage = snap.to_usage().unwrap();
@@ -252,6 +275,31 @@ mod tests {
         assert_eq!(usage.weekly.unwrap().resets_at, Some(1_738_857_600));
         assert_eq!(usage.source, UsageSource::ClaudeStatusLine);
         assert_eq!(usage.fetched_at, 99);
+    }
+
+    #[test]
+    fn bridge_remembers_windows_claude_code_dropped_after_reset() {
+        let dir = tempfile::tempdir().unwrap();
+        let snapshot_path = dir.path().join("snap.json");
+        run_bridge(&mut serde_json::to_vec(&input()).unwrap().as_slice(), &mut Vec::new(), &snapshot_path, 1);
+
+        // After the 5-hour reset, Claude Code sends only the weekly window.
+        let after_reset = 1_738_425_600_000 + 60_000;
+        let weekly_only = json!({
+            "model": { "display_name": "Opus" },
+            "rate_limits": { "seven_day": { "used_percentage": 42.0, "resets_at": 1_738_857_600 } }
+        });
+        let mut out = Vec::new();
+        run_bridge(&mut serde_json::to_vec(&weekly_only).unwrap().as_slice(), &mut out, &snapshot_path, after_reset);
+        assert_eq!(String::from_utf8(out).unwrap(), "Opus · 5h reset · week 58% left\n");
+        let snap = read_snapshot(&snapshot_path).unwrap();
+        assert_eq!(snap.five_hour.unwrap().resets_at, Some(1_738_425_600));
+        assert_eq!(snap.seven_day.unwrap().used_percentage, 42.0);
+
+        // A window that disappears before its reset time is not carried over.
+        run_bridge(&mut serde_json::to_vec(&input()).unwrap().as_slice(), &mut Vec::new(), &snapshot_path, 1);
+        run_bridge(&mut serde_json::to_vec(&weekly_only).unwrap().as_slice(), &mut Vec::new(), &snapshot_path, 2);
+        assert_eq!(read_snapshot(&snapshot_path).unwrap().five_hour, None);
     }
 
     #[test]

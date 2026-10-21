@@ -20,6 +20,8 @@ export interface Usage {
   source: UsageSource;
   /** Unix milliseconds. */
   fetchedAt: number;
+  /** The provider says included usage isn't allowed right now, whatever the percentages show. */
+  blocked?: boolean;
 }
 
 export type ProviderStatus =

@@ -314,6 +314,8 @@ pub fn parse_rate_limits(result: &Value, now_ms: i64) -> Result<Usage, ProviderE
         plan: get(snapshot, "planType", "plan_type").and_then(Value::as_str).map(str::to_string),
         source: UsageSource::CodexAppServer,
         fetched_at: now_ms,
+        // Only an explicit `false` counts; null means the backend didn't say.
+        blocked: get(result, "ordinaryUsageAllowed", "ordinary_usage_allowed").and_then(Value::as_bool) == Some(false),
     };
 
     for (slot, fallback) in [("primary", WindowKind::FiveHour), ("secondary", WindowKind::Weekly)] {
@@ -359,6 +361,16 @@ mod tests {
         assert_eq!(usage.plan.as_deref(), Some("plus"));
         assert_eq!(usage.fetched_at, 42);
         assert_eq!(usage.source, UsageSource::CodexAppServer);
+        assert!(!usage.blocked);
+    }
+
+    #[test]
+    fn reports_when_included_usage_is_not_allowed() {
+        let mut value = sample();
+        value["ordinaryUsageAllowed"] = json!(false);
+        assert!(parse_rate_limits(&value, 0).unwrap().blocked);
+        value["ordinaryUsageAllowed"] = Value::Null;
+        assert!(!parse_rate_limits(&value, 0).unwrap().blocked);
     }
 
     #[test]
@@ -521,5 +533,20 @@ mod tests {
         let found = find_vendored_exe(dir.path());
         assert_eq!(found.len(), 2);
         assert!(found[0].to_string_lossy().contains(mine));
+    }
+
+    /// Live check against a real Codex binary with an empty CODEX_HOME (signed out):
+    /// spawns `codex app-server`, speaks the protocol and maps the reply.
+    /// Run with `QUOTA_CODEX_BIN=/path/to/codex cargo test -- --ignored`.
+    #[tokio::test]
+    #[ignore]
+    async fn real_app_server_reports_signed_out() {
+        let Ok(bin) = std::env::var("QUOTA_CODEX_BIN") else {
+            panic!("set QUOTA_CODEX_BIN to a codex executable");
+        };
+        let home = tempfile::tempdir().unwrap();
+        std::env::set_var("CODEX_HOME", home.path());
+        let result = fetch(Some(bin)).await;
+        assert!(matches!(result, Err(ProviderError::SignedOut(_))), "{result:?}");
     }
 }

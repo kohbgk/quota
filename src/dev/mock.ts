@@ -99,6 +99,9 @@ function scenario(name: string): AppSnapshot {
       claude = provider("claude", { kind: "ready" }, usage(100, 81, "max", "claudeUsageEndpoint"));
       claude.usage!.fiveHour!.resetsAt = null;
       break;
+    case "blocked":
+      codex.usage!.blocked = true;
+      break;
     case "shortcut-error":
       shortcutError = "Ctrl+Shift+Space is already used by another app. Choose a different shortcut in Settings.";
       break;

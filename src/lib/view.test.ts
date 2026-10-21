@@ -80,6 +80,22 @@ describe("overlay view model", () => {
     expect(vm.cards[0]!.rows[0]).toMatchObject({ kind: "reset" });
   });
 
+  it("treats a window past its reset time as reset even when recently fetched", () => {
+    // Claude Code's status line stops sending a window once it resets; Quota keeps the old one.
+    const u = { ...usage(90, 20, 10_000), plan: null, source: "claudeStatusLine" as const };
+    u.fiveHour!.resetsAt = sec(-60_000);
+    const vm = buildOverlay(snap([ready()[0]!, p("claude", { kind: "ready" }, u)]), NOW);
+    expect(vm.cards[1]!.rows[0]).toMatchObject({ kind: "reset", note: "Reset since last update" });
+    expect(vm.cards[1]!.rows[1]).toMatchObject({ kind: "value", remaining: 80 });
+  });
+
+  it("warns when the provider says included usage is blocked", () => {
+    const u = { ...usage(40, 20), blocked: true };
+    const vm = buildOverlay(snap([p("codex", { kind: "ready" }, u), ready()[1]!]), NOW);
+    expect(vm.cards[0]!.notice).toEqual({ tone: "warn", text: "Included usage isn't available right now" });
+    expect(vm.cards[1]!.notice).toBeNull();
+  });
+
   it("dims stale data and explains why after a failed refresh", () => {
     const vm = buildOverlay(
       snap([p("codex", { kind: "error", message: "offline" }, usage(28, 55, 3_600_000)), ready()[1]!]),

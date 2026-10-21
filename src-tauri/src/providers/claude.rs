@@ -242,7 +242,7 @@ pub fn parse_usage_response(value: &Value, plan: Option<String>, now_ms: i64) ->
         w.window_minutes = Some(10_080);
         w
     });
-    Ok(Usage { five_hour, weekly, plan, source: UsageSource::ClaudeUsageEndpoint, fetched_at: now_ms })
+    Ok(Usage { five_hour, weekly, plan, source: UsageSource::ClaudeUsageEndpoint, fetched_at: now_ms, blocked: false })
 }
 
 #[cfg(test)]

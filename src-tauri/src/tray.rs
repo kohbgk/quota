@@ -6,7 +6,8 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::core::{AppSnapshot, Core, Reason};
-use crate::model::{ProviderStatus, ProviderState};
+use crate::model::{remaining_percent, ProviderStatus, ProviderState};
+use crate::settings::Settings;
 
 const TRAY_ID: &str = "quota";
 
@@ -64,15 +65,26 @@ pub fn update_menu(app: &AppHandle) {
     }
 }
 
-fn summary(p: &ProviderState, five_hour: bool) -> Option<String> {
+/// One tooltip line: the first visible window the provider reports.
+fn summary(p: &ProviderState, settings: &Settings, now_ms: i64) -> Option<String> {
     let name = p.id.display_name();
     if !matches!(p.status, ProviderStatus::Ready) {
         return None;
     }
     let usage = p.usage.as_ref()?;
-    let (label, window) = if five_hour { ("5h", usage.five_hour.as_ref()) } else { ("week", usage.weekly.as_ref()) };
-    let window = window?;
-    let left = (100.0 - window.used_percent).round().clamp(0.0, 100.0);
+    if usage.blocked {
+        return Some(format!("{name}: included usage unavailable"));
+    }
+    let (label, window) = [
+        (settings.show_five_hour, "5h", usage.five_hour.as_ref()),
+        (settings.show_weekly, "week", usage.weekly.as_ref()),
+    ]
+    .into_iter()
+    .find_map(|(shown, label, window)| if shown { window.map(|w| (label, w)) } else { None })?;
+    if window.has_reset(now_ms) {
+        return Some(format!("{name}: {label} limit reset"));
+    }
+    let left = remaining_percent(window.used_percent);
     Some(format!("{name}: {left}% left ({label})"))
 }
 
@@ -87,10 +99,32 @@ pub fn update_tooltip(app: &AppHandle, snapshot: &AppSnapshot) {
             crate::model::ProviderId::Claude => s.show_claude,
         };
         if visible {
-            if let Some(line) = summary(p, s.show_five_hour) {
+            if let Some(line) = summary(p, s, snapshot.now) {
                 lines.push(line);
             }
         }
     }
     let _ = tray.set_tooltip(Some(lines.join("\n")));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{LimitWindow, ProviderId, Usage, UsageSource};
+
+    fn ready(five_hour: Option<LimitWindow>, weekly: Option<LimitWindow>) -> ProviderState {
+        let usage = Usage { five_hour, weekly, plan: None, source: UsageSource::CodexAppServer, fetched_at: 0, blocked: false };
+        ProviderState { status: ProviderStatus::Ready, usage: Some(usage), ..ProviderState::new(ProviderId::Codex) }
+    }
+
+    #[test]
+    fn tooltip_rounds_down_and_skips_unreported_windows() {
+        let settings = Settings::default();
+        let both = ready(Some(LimitWindow::new(23.5, Some(2_000), Some(300))), Some(LimitWindow::new(10.0, None, None)));
+        assert_eq!(summary(&both, &settings, 1_000_000).as_deref(), Some("Codex: 76% left (5h)"));
+        let weekly_only = ready(None, Some(LimitWindow::new(10.0, None, Some(10_080))));
+        assert_eq!(summary(&weekly_only, &settings, 0).as_deref(), Some("Codex: 90% left (week)"));
+        let reset = ready(Some(LimitWindow::new(90.0, Some(1_000), Some(300))), None);
+        assert_eq!(summary(&reset, &settings, 1_000_000).as_deref(), Some("Codex: 5h limit reset"));
+    }
 }

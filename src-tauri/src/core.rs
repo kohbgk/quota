@@ -427,6 +427,7 @@ mod tests {
             plan: None,
             source: UsageSource::CodexAppServer,
             fetched_at,
+            blocked: false,
         }
     }
 

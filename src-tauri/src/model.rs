@@ -38,6 +38,11 @@ impl LimitWindow {
         let used_percent = if used_percent.is_finite() { used_percent.clamp(0.0, 100.0) } else { 0.0 };
         Self { used_percent, resets_at, window_minutes }
     }
+
+    /// The window's reset time has passed, so its usage numbers are out of date.
+    pub fn has_reset(&self, now_ms: i64) -> bool {
+        self.resets_at.is_some_and(|at| at.saturating_mul(1000) <= now_ms)
+    }
 }
 
 /// Where a usage snapshot came from. Shown to the user so the data is never ambiguous.
@@ -62,6 +67,10 @@ pub struct Usage {
     pub source: UsageSource,
     /// Unix milliseconds when the provider produced (or Quota retrieved) this data.
     pub fetched_at: i64,
+    /// The provider says included usage is currently not allowed for this account,
+    /// whatever the percentages show (Codex `ordinaryUsageAllowed: false`).
+    #[serde(default)]
+    pub blocked: bool,
 }
 
 /// The provider's connection state, independent of whether cached data exists.
@@ -137,6 +146,13 @@ pub fn classify_window_minutes(minutes: i64) -> WindowKind {
     }
 }
 
+/// Percentage left, rounded down so Quota never overstates what remains.
+/// Matches `remainingPercent` in the UI.
+pub fn remaining_percent(used_percent: f64) -> i64 {
+    let used = if used_percent.is_finite() { used_percent.clamp(0.0, 100.0) } else { 0.0 };
+    (100.0 - used + 1e-9).floor().clamp(0.0, 100.0) as i64
+}
+
 /// Removes anything that looks like a secret from text before it is shown or logged.
 pub fn redact(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -170,6 +186,15 @@ mod tests {
         assert_eq!(LimitWindow::new(140.0, None, None).used_percent, 100.0);
         assert_eq!(LimitWindow::new(-3.0, None, None).used_percent, 0.0);
         assert_eq!(LimitWindow::new(f64::NAN, None, None).used_percent, 0.0);
+    }
+
+    #[test]
+    fn remaining_rounds_down() {
+        assert_eq!(remaining_percent(23.5), 76);
+        assert_eq!(remaining_percent(0.4), 99);
+        assert_eq!(remaining_percent(28.0), 72);
+        assert_eq!(remaining_percent(100.0), 0);
+        assert_eq!(remaining_percent(-5.0), 100);
     }
 
     #[test]
