@@ -1,0 +1,42 @@
+[package]
+name = "quota"
+version = "0.1.0"
+description = "Your AI usage. One shortcut away."
+authors = ["kohbgk"]
+license = "MIT"
+repository = "https://github.com/kohbgk/quota"
+edition = "2021"
+rust-version = "1.82"
+
+[lib]
+name = "quota_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["process", "io-util", "time", "macros", "rt", "sync"] }
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier", "json"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+dirs = "6"
+log = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

@@ -1,0 +1,19 @@
+# Dependencies and build output
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Local tooling
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+
+# Never commit credentials or local auth files
+.env
+.env.*
+*.pem
+*.key
+.credentials.json
+auth.json

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A2A30"/>
+      <stop offset="1" stop-color="#121214"/>
+    </linearGradient>
+    <linearGradient id="arc" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#8BF7CF"/>
+      <stop offset="1" stop-color="#25C987"/>
+    </linearGradient>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <line x1="626" y1="626" x2="736" y2="736" stroke="#000" stroke-width="148" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="220" fill="url(#bg)"/>
+  <rect x="49.5" y="49.5" width="925" height="925" rx="218.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.09" stroke-width="3"/>
+  <g mask="url(#cut)">
+    <circle cx="512" cy="512" r="236" fill="none" stroke="#FFFFFF" stroke-opacity="0.13" stroke-width="104"/>
+    <circle cx="512" cy="512" r="236" fill="none" stroke="url(#arc)" stroke-width="104" stroke-linecap="round"
+            stroke-dasharray="1038 1483" transform="rotate(-90 512 512)"/>
+  </g>
+  <line x1="626" y1="626" x2="736" y2="736" stroke="#F5F5F7" stroke-width="96" stroke-linecap="round"/>
+</svg>
