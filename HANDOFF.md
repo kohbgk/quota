@@ -62,41 +62,35 @@ src/
 
 Done and verified on Linux:
 - Rust: builds with zero warnings, clippy clean, **37 unit tests pass**.
-- Frontend: `tsc` clean, **24 vitest tests pass**, production build OK.
+- Frontend: `tsc` clean, **26 vitest tests pass**, production build OK.
 - UI reviewed via headless-Chromium screenshots of ~15 overlay states + settings (dark/light).
-- First commit pushed; CI run started: https://github.com/kohbgk/quota/actions
+- Windows CI green (typecheck, vitest, clippy -D warnings, cargo test, tauri build): https://github.com/kohbgk/quota/actions
 
-**Not yet verified** (needs Windows / CI):
-- The Windows-only code paths: `creation_flags(CREATE_NO_WINDOW)` in codex.rs,
-  `GetShortPathNameW` in statusline.rs, NSIS `windows/hooks.nsh`, the whole `tauri build` bundle.
+**Not yet verified** (needs a real Windows desktop):
+- Windows-only code paths compile and the bundle builds in CI, but haven't been exercised:
+  `CREATE_NO_WINDOW` in codex.rs, `GetShortPathNameW` in statusline.rs, NSIS `windows/hooks.nsh`.
   This Linux sandbox cannot compile for Windows (static.rust-lang.org is blocked), so CI is the
   Windows compiler. Read CI results via the public API (no auth needed for a public repo):
   `curl -s https://api.github.com/repos/kohbgk/quota/actions/runs?per_page=3`
   then `.../actions/runs/<id>/jobs` and `.../check-runs/<job_id>/annotations` for compiler errors.
 - Real end-to-end usage with the user's actual Codex / Claude logins (only the user can do this).
 
-## Next steps (in order)
+## Next steps
 
-1. **Get CI green on Windows.** Fix anything the first run reports. Push, re-check.
-2. **UI polish found in the screenshot review** (small, all in `src/`):
-   - Footer "Updated …" is blank when no provider is `ready` (e.g. one error + one rate-limited).
-     In `buildOverlay` fall back to the oldest `fetchedAt` among cards that show data.
-   - At 0% left, make the reset line read "Limit reached · resets in 36m".
-   - First-run hint banner wraps keycaps awkwardly; drop the inline `<kbd>`s (the footer
-     already shows the shortcut) — e.g. "Quota keeps running in your tray. Use the shortcut below anytime."
-   - "Not reported" rows: the striped bar is a bit loud; lower its contrast.
-   - Optionally tighten vertical rhythm a little (`.rows` gap 14→12, card padding 14→12 top).
-   - Re-run screenshots after changes (see "Previewing the UI").
-3. **Write the README** (brief §11): what/why, providers, features, install (Releases),
-   shortcut, how auth works (copy the honest wording from Settings), settings, known
-   limitations (undocumented Claude endpoint; status line bridge won't replace custom lines;
-   portable exe needs WebView2; Windows SmartScreen on unsigned builds), build from source,
-   release process (`git tag v0.1.0 && git push --tags`). Add a screenshot (dark overlay).
-4. **Release v0.1.0** once CI is green: version lives in `src-tauri/tauri.conf.json`,
-   `src-tauri/Cargo.toml`, `package.json` (keep in sync). Tag `v0.1.0` and push the tag.
-5. Give the user a manual Windows test checklist (brief §10): both / one / no provider,
-   offline, shortcut conflict (try Alt+Space), 5-hour-only / weekly-only, provider toggles,
-   restart persistence, two monitors with different scaling, autostart, tray left-click, Quit.
+Session 2 finished the original list: Windows CI green (typecheck, vitest, clippy
+`-D warnings`, cargo test, `tauri build`), UI polish (limit-reached reset line, footer
+fallback, calmer first-run banner and "Not reported" bar, tighter rhythm), full README with
+`docs/overlay-dark.png`, settings polish (middle-shortened Codex path, "Status line" source
+label), `CHANGELOG.md` as release notes, `docs/TESTING.md`, and **v0.1.0 published**:
+https://github.com/kohbgk/quota/releases/tag/v0.1.0 (setup + portable exe + SHA256SUMS,
+checksums verified). Cloud sessions can't push tags (the git gateway hangs up), so the
+release was started with the Release workflow's `workflow_dispatch` on main, which tags
+`v<version>` itself. Remaining:
+
+1. **Manual Windows testing by the user** with `docs/TESTING.md`. Fix whatever it turns up;
+   for a fix release bump the version in all three files, add a CHANGELOG section, and
+   run the Release workflow on main.
+2. Code signing would remove the SmartScreen warning (needs a certificate from the user).
 
 ## Working in this repo
 
