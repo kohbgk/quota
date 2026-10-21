@@ -1,10 +1,13 @@
 name: Release
 
-# Push a tag like v0.1.0 (matching the version in src-tauri/tauri.conf.json)
-# to build Quota on Windows and publish an installer and a portable .exe.
+# Builds Quota on Windows and publishes an installer and a portable .exe.
+# Start it either way:
+#   - push a tag like v0.1.0 (matching the version in src-tauri/tauri.conf.json), or
+#   - run this workflow on main from the Actions tab; it tags main as v<version>.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,18 +18,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check tag matches app version
+      - name: Check version, tag and changelog
         shell: pwsh
         run: |
           $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          if ("v$version" -ne "${{ github.ref_name }}") {
-            Write-Error "Tag ${{ github.ref_name }} doesn't match app version v$version"
-            exit 1
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            if ("${{ github.ref }}" -ne "refs/heads/main") {
+              Write-Error "Run the release workflow on main, not ${{ github.ref_name }}"
+              exit 1
+            }
+            $tag = "v$version"
+          } else {
+            $tag = "${{ github.ref_name }}"
+            if ("v$version" -ne $tag) {
+              Write-Error "Tag $tag doesn't match app version v$version"
+              exit 1
+            }
           }
           if (-not ((Get-Content CHANGELOG.md) -contains "## [$version]")) {
             Write-Error "CHANGELOG.md has no '## [$version]' section for the release notes"
             exit 1
           }
+          "VERSION=$version" >> $env:GITHUB_ENV
+          "TAG=$tag" >> $env:GITHUB_ENV
 
       - uses: actions/setup-node@v4
         with:
@@ -48,10 +62,9 @@ jobs:
       - name: Prepare release files
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
           New-Item -ItemType Directory -Force out | Out-Null
-          Copy-Item src-tauri/target/release/bundle/nsis/*.exe "out/Quota_${version}_x64-setup.exe"
-          Copy-Item src-tauri/target/release/quota.exe "out/Quota_${version}_x64-portable.exe"
+          Copy-Item src-tauri/target/release/bundle/nsis/*.exe "out/Quota_$($env:VERSION)_x64-setup.exe"
+          Copy-Item src-tauri/target/release/quota.exe "out/Quota_$($env:VERSION)_x64-portable.exe"
           Get-ChildItem out | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)"
@@ -63,12 +76,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Release notes are this version's section of CHANGELOG.md.
-          $version = "${{ github.ref_name }}".TrimStart("v")
           $lines = Get-Content CHANGELOG.md
-          $start = [array]::IndexOf($lines, "## [$version]")
-          if ($start -lt 0) { Write-Error "CHANGELOG.md has no '## [$version]' section"; exit 1 }
+          $start = [array]::IndexOf($lines, "## [$($env:VERSION)]")
           $section = $lines[($start + 1)..($lines.Length - 1)]
           $next = 0
           while ($next -lt $section.Length -and -not $section[$next].StartsWith("## ")) { $next++ }
           $section[0..($next - 1)] | Set-Content release-notes.md
-          gh release create "${{ github.ref_name }}" out/* --title "Quota ${{ github.ref_name }}" --notes-file release-notes.md
+          # Creates the tag at this commit when it doesn't exist yet (workflow_dispatch).
+          gh release create $env:TAG out/* --target "${{ github.sha }}" --title "Quota $($env:TAG)" --notes-file release-notes.md

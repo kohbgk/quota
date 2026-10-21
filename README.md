@@ -174,7 +174,8 @@ Releases are built by GitHub Actions. Keep the version in sync in `src-tauri/tau
 git tag v0.1.0 && git push --tags
 ```
 
-The release workflow checks that the tag matches the app version, runs the tests, builds on
+Or run the **Release** workflow on `main` from the Actions tab, which tags `main` as
+`v<version>` for you. The release workflow checks that the tag matches the app version, runs the tests, builds on
 Windows, and publishes the installer, the portable exe, and `SHA256SUMS.txt` to a GitHub release.
 Before tagging, run the manual checklist in [`docs/TESTING.md`](docs/TESTING.md).
 
