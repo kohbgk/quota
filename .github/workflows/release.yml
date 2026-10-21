@@ -23,6 +23,10 @@ jobs:
             Write-Error "Tag ${{ github.ref_name }} doesn't match app version v$version"
             exit 1
           }
+          if (-not ((Get-Content CHANGELOG.md) -contains "## [$version]")) {
+            Write-Error "CHANGELOG.md has no '## [$version]' section for the release notes"
+            exit 1
+          }
 
       - uses: actions/setup-node@v4
         with:
@@ -58,4 +62,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" out/* --title "Quota ${{ github.ref_name }}" --generate-notes
+          # Release notes are this version's section of CHANGELOG.md.
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $lines = Get-Content CHANGELOG.md
+          $start = [array]::IndexOf($lines, "## [$version]")
+          if ($start -lt 0) { Write-Error "CHANGELOG.md has no '## [$version]' section"; exit 1 }
+          $section = $lines[($start + 1)..($lines.Length - 1)]
+          $next = 0
+          while ($next -lt $section.Length -and -not $section[$next].StartsWith("## ")) { $next++ }
+          $section[0..($next - 1)] | Set-Content release-notes.md
+          gh release create "${{ github.ref_name }}" out/* --title "Quota ${{ github.ref_name }}" --notes-file release-notes.md

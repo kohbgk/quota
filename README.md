@@ -167,7 +167,8 @@ src/             TypeScript UI (no framework): overlay.ts, settings.ts, lib/ (vi
 ## Releases
 
 Releases are built by GitHub Actions. Keep the version in sync in `src-tauri/tauri.conf.json`,
-`src-tauri/Cargo.toml`, and `package.json`, then tag:
+`src-tauri/Cargo.toml`, and `package.json`, add a `## [x.y.z]` section to
+[`CHANGELOG.md`](CHANGELOG.md) (it becomes the release notes), then tag:
 
 ```bash
 git tag v0.1.0 && git push --tags
