@@ -18,8 +18,8 @@ pub fn get_state(core: CoreState) -> AppSnapshot {
     core.snapshot()
 }
 
-/// Applies display and general preferences. Shortcut, Claude access and
-/// first-run flags have dedicated commands and are not changed here.
+/// Applies display and general preferences. Shortcut, Claude access, overlay
+/// position and first-run flags have dedicated paths and are not changed here.
 #[tauri::command]
 pub fn update_settings(app: AppHandle, core: CoreState, settings: Settings) -> Result<AppSnapshot, String> {
     let current = core.settings();
@@ -28,6 +28,8 @@ pub fn update_settings(app: AppHandle, core: CoreState, settings: Settings) -> R
         claude_usage_endpoint: current.claude_usage_endpoint,
         claude_status_line: current.claude_status_line,
         onboarded: current.onboarded,
+        // Changed only by dragging the overlay or the reset command.
+        overlay_position: current.overlay_position,
         codex_path: settings.codex_path.as_ref().map(|p| p.trim().to_string()).filter(|p| !p.is_empty()),
         ..settings
     };
@@ -97,13 +99,25 @@ pub fn resize_overlay(app: AppHandle, height: f64) {
     crate::overlay::set_height(&app, height);
 }
 
+/// Async so it never runs on the main thread (see `overlay::open_settings`).
 #[tauri::command]
-pub fn open_settings(app: AppHandle, section: Option<String>) {
+pub async fn open_settings(app: AppHandle, section: Option<String>) {
     crate::overlay::open_settings(&app, section);
 }
 
 #[tauri::command]
+pub fn start_overlay_drag(app: AppHandle) {
+    crate::overlay::start_drag(&app);
+}
+
+#[tauri::command]
+pub fn reset_overlay_position(app: AppHandle) {
+    crate::overlay::reset_position(&app);
+}
+
+#[tauri::command]
 pub fn quit_app(app: AppHandle) {
+    crate::overlay::remember_position(&app);
     app.exit(0);
 }
 

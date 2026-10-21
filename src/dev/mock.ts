@@ -32,6 +32,7 @@ const defaults: Settings = {
   claudeStatusLine: false,
   codexPath: null,
   onboarded: true,
+  overlayPosition: null,
 };
 
 function provider(id: ProviderState["id"], status: ProviderState["status"], u: Usage | null, refreshing = false): ProviderState {
@@ -149,6 +150,14 @@ export function createMockBackend(): Backend {
       return shortcut;
     },
     pause_shortcut: () => undefined,
+    start_overlay_drag: () => {
+      state.settings.overlayPosition = { x: 0.8, y: 0.3, monitor: null };
+      emit();
+    },
+    reset_overlay_position: () => {
+      state.settings.overlayPosition = null;
+      emit();
+    },
     set_launch_at_startup: ({ enabled }) => {
       state.launchAtStartup = Boolean(enabled);
       emit();

@@ -73,6 +73,17 @@ pub struct OverlayState {
     pub height: f64,
     pub ready: bool,
     pub show_when_ready: bool,
+    /// The user dragged the overlay since it was last placed; save where it ended up.
+    pub dragged: bool,
+    /// Physical top-left corner Quota last placed the overlay at.
+    pub placed_at: Option<(i32, i32)>,
+    /// When the user last started dragging the overlay.
+    pub drag_started_at: i64,
+    /// When the overlay last moved, and whether a save is waiting for moves to settle.
+    pub moved_at: i64,
+    pub save_pending: bool,
+    /// A settings window is being created on another thread.
+    pub settings_opening: bool,
 }
 
 /// Minimum seconds between two network attempts for the same provider.

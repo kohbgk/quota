@@ -40,6 +40,29 @@ impl RefreshInterval {
     }
 }
 
+/// Where the user dragged the overlay: the monitor it was dropped on, and the spot as
+/// fractions of that monitor's work area, so it survives resolution and scaling changes
+/// (and maps onto another monitor if that one is gone). `x` spans the free width
+/// (0 = left edge, 1 = right edge); `y` is the top edge's offset as a fraction of the height.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OverlayPosition {
+    pub x: f64,
+    pub y: f64,
+    #[serde(default)]
+    pub monitor: Option<String>,
+}
+
+impl OverlayPosition {
+    /// Centered horizontally, a fifth of the way down, on the monitor with the cursor.
+    pub const DEFAULT: OverlayPosition = OverlayPosition { x: 0.5, y: 0.2, monitor: None };
+
+    /// `None` for values that can't place a window (corrupt settings file).
+    pub fn sanitized(self) -> Option<Self> {
+        (self.x.is_finite() && self.y.is_finite())
+            .then(|| OverlayPosition { x: self.x.clamp(0.0, 1.0), y: self.y.clamp(0.0, 1.0), monitor: self.monitor })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -60,6 +83,8 @@ pub struct Settings {
     pub codex_path: Option<String>,
     /// Set after the first launch so first-run behavior only happens once.
     pub onboarded: bool,
+    /// Where the user moved the overlay; `None` uses the default spot.
+    pub overlay_position: Option<OverlayPosition>,
 }
 
 impl Default for Settings {
@@ -77,6 +102,7 @@ impl Default for Settings {
             claude_status_line: false,
             codex_path: None,
             onboarded: false,
+            overlay_position: None,
         }
     }
 }
@@ -114,6 +140,7 @@ impl Settings {
                 self.codex_path = None;
             }
         }
+        self.overlay_position = self.overlay_position.and_then(OverlayPosition::sanitized);
         self
     }
 
@@ -189,6 +216,26 @@ mod tests {
         assert!(!loaded.show_weekly);
         assert!(loaded.show_five_hour);
         assert_eq!(loaded.shortcut, DEFAULT_SHORTCUT);
+    }
+
+    #[test]
+    fn remembers_the_overlay_position() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let position = OverlayPosition { x: 0.25, y: 0.6, monitor: Some(r"\\.\DISPLAY2".into()) };
+        let s = Settings { overlay_position: Some(position.clone()), ..Default::default() };
+        s.save_to(&path).unwrap();
+        assert_eq!(Settings::load_from(&path).overlay_position, Some(position));
+
+        // Files from older versions have no position; values without a monitor still load.
+        std::fs::write(&path, r#"{"overlayPosition": {"x": 0.5, "y": 0.1}}"#).unwrap();
+        let loaded = Settings::load_from(&path).overlay_position.unwrap();
+        assert_eq!((loaded.x, loaded.y, loaded.monitor), (0.5, 0.1, None));
+
+        // Out-of-range values are pulled back on screen.
+        std::fs::write(&path, r#"{"overlayPosition": {"x": 7.0, "y": -2.0}}"#).unwrap();
+        let loaded = Settings::load_from(&path).overlay_position.unwrap();
+        assert_eq!((loaded.x, loaded.y), (1.0, 0.0));
     }
 
     #[test]

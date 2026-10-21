@@ -42,7 +42,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             "show" => crate::overlay::show(app),
             "refresh" => app.state::<Arc<Core>>().refresh_all(Reason::Manual),
             "settings" => crate::overlay::open_settings(app, None),
-            "quit" => app.exit(0),
+            "quit" => {
+                crate::overlay::remember_position(app);
+                app.exit(0);
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

@@ -18,6 +18,7 @@ const settings: Settings = {
   claudeStatusLine: false,
   codexPath: null,
   onboarded: true,
+  overlayPosition: null,
 };
 
 function usage(fiveUsed: number | null, weekUsed: number | null, fetchedAgo = 10_000): Usage {

@@ -3,6 +3,7 @@ import "./styles/overlay.css";
 
 import { api, errorText } from "./lib/api";
 import { escapeHtml, inlineCode, shortcutKeys } from "./lib/format";
+import { afterRender } from "./lib/frame";
 import { icons, logo } from "./lib/icons";
 import { setTheme } from "./lib/theme";
 import type { AppSnapshot } from "./lib/types";
@@ -266,6 +267,25 @@ app.addEventListener("click", (e) => {
   }
 });
 
+// Drag the overlay from anywhere that isn't a control; Quota remembers where it's dropped.
+// The move starts only once the mouse has moved with the button held, so plain clicks stay clicks.
+let pressedAt: { x: number; y: number } | null = null;
+app.addEventListener("mousedown", (e) => {
+  if (e.button !== 0 || (e.target as HTMLElement).closest("button, a, input, select, [data-cmd]")) return;
+  e.preventDefault();
+  pressedAt = { x: e.screenX, y: e.screenY };
+});
+window.addEventListener("mousemove", (e) => {
+  if (!pressedAt) return;
+  if (!(e.buttons & 1)) {
+    pressedAt = null;
+  } else if (Math.hypot(e.screenX - pressedAt.x, e.screenY - pressedAt.y) >= 4) {
+    pressedAt = null;
+    void api.startOverlayDrag().catch(() => {});
+  }
+});
+window.addEventListener("mouseup", () => (pressedAt = null));
+
 refreshBtn.addEventListener("click", () => void run(() => api.refresh()));
 document.getElementById("settings")!.addEventListener("click", () => void run(() => api.openSettings()));
 
@@ -302,8 +322,8 @@ async function start() {
   });
   snapshot = await api.getState();
   render();
-  // Tell the backend we've painted once, so the first show never flashes empty.
-  requestAnimationFrame(() => requestAnimationFrame(() => void api.overlayReady()));
+  // Tell the backend we've rendered once, so the first show never flashes empty.
+  afterRender(() => void api.overlayReady().catch(() => {}));
 }
 
 void start();

@@ -57,6 +57,8 @@ export interface Settings {
   claudeStatusLine: boolean;
   codexPath: string | null;
   onboarded: boolean;
+  /** Where the user dragged the overlay; null for the default spot. */
+  overlayPosition: { x: number; y: number; monitor: string | null } | null;
 }
 
 export interface AppSnapshot {

@@ -23,6 +23,11 @@ clippy and the build. These cover what only a real desktop can.
 - [ ] Change the shortcut (e.g. Ctrl+Alt+Q): works immediately and after restart.
 - [ ] Try a taken one (e.g. Alt+Space or one another app holds): clear error and the old shortcut keeps working.
 - [ ] Two monitors with different scaling (100% / 150%): overlay opens on the cursor's monitor, crisp and fully on screen.
+- [ ] Drag the overlay by any empty area (not a button): it moves; plain clicks on text don't move it.
+      Hide and reopen, then restart Quota: it comes back to the same spot. Drag it to the other monitor:
+      it reopens there. Settings → General → Position → Reset puts it back in the default spot.
+- [ ] Click outside the overlay right after Quota starts (before clicking the overlay itself): it hides.
+- [ ] The overlay's settings button and the tray's Settings… both open Settings every time; a double-click opens one window.
 - [ ] Tray left-click toggles; right-click menu: Show Quota, Refresh now, Settings…, Quit Quota. Tooltip shows usage left.
 
 **Settings**

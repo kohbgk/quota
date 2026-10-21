@@ -38,6 +38,8 @@ pub fn run(start_hidden: bool) {
             commands::overlay_ready,
             commands::resize_overlay,
             commands::open_settings,
+            commands::start_overlay_drag,
+            commands::reset_overlay_position,
             commands::quit_app,
             commands::set_claude_usage_endpoint,
             commands::set_claude_status_line,
@@ -62,6 +64,7 @@ pub fn run(start_hidden: bool) {
                 let app_for_events = handle.clone();
                 win.on_window_event(move |event| match event {
                     WindowEvent::Focused(false) => overlay::on_blur(&app_for_events),
+                    WindowEvent::Moved(_) => overlay::on_moved(&app_for_events),
                     WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
                         overlay::hide(&app_for_events);

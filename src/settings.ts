@@ -4,6 +4,7 @@ import "./styles/settings.css";
 import { api, errorText } from "./lib/api";
 import { escapeHtml, planLabel, shortcutKeys, shortenPath } from "./lib/format";
 import { icons, logo } from "./lib/icons";
+import { afterRender } from "./lib/frame";
 import { recordKey } from "./lib/keys";
 import { setTheme } from "./lib/theme";
 import type { AppSnapshot, ProviderDetails, ProviderState, RefreshInterval, Settings, Theme } from "./lib/types";
@@ -112,6 +113,7 @@ app.innerHTML = `
         <div class="group">
           ${item("Launch at startup", "Start Quota quietly when you sign in to Windows", sw("launchAtStartup"))}
           ${item("Hide when clicking outside", "Dismiss the overlay when it loses focus", sw("hideOnBlur"))}
+          ${item("Position", '<span id="positionDesc"></span>', '<button class="btn secondary" id="resetPosition">Reset</button>')}
           ${item(
             "Appearance",
             "Follow Windows or pick a theme",
@@ -261,6 +263,10 @@ function render() {
     b.setAttribute("aria-pressed", String(b.dataset.theme === s.theme));
   });
   $<HTMLSelectElement>("refreshInterval").value = s.refreshInterval;
+  $("positionDesc").textContent = s.overlayPosition
+    ? "Quota opens where you last dragged it"
+    : "Drag the overlay anywhere to move it; Quota remembers the spot";
+  $<HTMLButtonElement>("resetPosition").disabled = !s.overlayPosition;
   $("version").textContent = snapshot.version;
 }
 
@@ -340,6 +346,15 @@ document.querySelectorAll<HTMLButtonElement>("#theme button").forEach((b) =>
 $<HTMLSelectElement>("refreshInterval").addEventListener("change", (e) =>
   void saveSettings({ refreshInterval: (e.target as HTMLSelectElement).value as RefreshInterval }),
 );
+
+$("resetPosition").addEventListener("click", async () => {
+  try {
+    await api.resetOverlayPosition();
+    toast("Overlay moved back to its default spot");
+  } catch (err) {
+    toast(errorText(err), true);
+  }
+});
 
 $("codexPathForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -438,19 +453,23 @@ function openSection(section: string) {
 // ---------- Startup ----------
 
 async function start() {
-  await api.onState((s) => {
-    snapshot = s;
+  try {
+    await api.onState((s) => {
+      snapshot = s;
+      render();
+    });
+    await api.on<string>("quota://open-section", (section) => openSection(section));
+    snapshot = await api.getState();
     render();
-  });
-  await api.on<string>("quota://open-section", (section) => openSection(section));
-  snapshot = await api.getState();
-  render();
-  void loadDetails();
-  requestAnimationFrame(async () => {
-    await api.showWindow();
-    const section = location.hash.slice(1);
-    if (section) setTimeout(() => openSection(section), 60);
-  });
+    void loadDetails();
+  } finally {
+    // Always show the window, even if loading failed, so it never stays invisible.
+    afterRender(async () => {
+      await api.showWindow().catch(() => {});
+      const section = location.hash.slice(1);
+      if (section) setTimeout(() => openSection(section), 60);
+    });
+  }
 }
 
 void start();

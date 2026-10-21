@@ -22,7 +22,9 @@ you sign in to either tool.
 ## Features
 
 - **One global shortcut** toggles the overlay on the monitor your cursor is on. Customizable,
-  with conflict detection.
+  with conflict detection. Click anywhere outside it, or press <kbd>Esc</kbd>, to dismiss it.
+- **Put it where you like.** Drag the overlay anywhere; it reopens in that spot, on that
+  monitor, until you reset it in Settings.
 - **Remaining %, never overstated.** Percentages are rounded down; a bar and a reset countdown
   ("Resets in 2h 14m", "Resets Thu 9:00 AM") sit under each limit.
 - **Honest about freshness.** Data that couldn't be refreshed is dimmed and says why ("Couldn't
@@ -107,7 +109,7 @@ Open Settings from the overlay's sliders button, the tray menu, or <kbd>Ctrl</kb
 | Overlay | Show 5-hour limits, show weekly limits (at least one stays on); show Codex, show Claude Code (at least one stays on) |
 | Shortcut | Record a new shortcut, or reset to the default |
 | Providers | Custom path to `codex.exe`; choose the Claude Code source(s) |
-| General | Launch at startup; hide when clicking outside; theme (System, Light, Dark); refresh every 2, 5, or 15 minutes, or only when opened |
+| General | Launch at startup; hide when clicking outside; reset the overlay's position; theme (System, Light, Dark); refresh every 2, 5, or 15 minutes, or only when opened |
 
 Quota also refreshes when you open the overlay if its data is more than a minute or two old, and
 backs off automatically when a provider is unavailable or asks it to slow down.
