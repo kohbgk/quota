@@ -61,8 +61,8 @@ src/
 ## Status
 
 Done and verified on Linux:
-- Rust: builds with zero warnings, clippy clean, **37 unit tests pass**.
-- Frontend: `tsc` clean, **26 vitest tests pass**, production build OK.
+- Rust: builds with zero warnings, clippy clean, **41 unit tests pass** (+2 opt-in live tests, `--ignored`).
+- Frontend: `tsc` clean, **29 vitest tests pass**, production build OK.
 - UI reviewed via headless-Chromium screenshots of ~15 overlay states + settings (dark/light).
 - Windows CI green (typecheck, vitest, clippy -D warnings, cargo test, tauri build): https://github.com/kohbgk/quota/actions
 
@@ -85,7 +85,22 @@ label), `CHANGELOG.md` as release notes, `docs/TESTING.md`, and **v0.1.0 publish
 https://github.com/kohbgk/quota/releases/tag/v0.1.0 (setup + portable exe + SHA256SUMS,
 checksums verified). Cloud sessions can't push tags (the git gateway hangs up), so the
 release was started with the Release workflow's `workflow_dispatch` on main, which tags
-`v<version>` itself. Remaining:
+`v<version>` itself.
+
+Later in session 2, the integrations were checked against reality and **v0.1.1** was released
+(https://github.com/kohbgk/quota/releases/tag/v0.1.1, now "latest"):
+- Codex: the protocol matches `codex app-server generate-ts` output from Codex 0.163, and a
+  live app-server returns exactly the errors Quota maps. Signed out gives "codex account
+  authentication required…" (Not signed in); an API key gives "chatgpt authentication
+  required…" (Usage isn't available). Live test:
+  `npm i @openai/codex` then `QUOTA_CODEX_BIN=<vendor codex binary> cargo test -- --ignored`.
+- Claude status line: the field names match https://code.claude.com/docs/en/statusline. Claude
+  Code drops a window once it resets, so the bridge keeps it and the UI shows it as reset.
+- Fixed: the tray and status line rounded remaining % to nearest (overstated by up to 1%); all
+  surfaces now use the round-down `remaining_percent()`.
+- Codex `ordinaryUsageAllowed: false` is surfaced as "Included usage isn't available right now".
+
+Remaining:
 
 1. **Manual Windows testing by the user** with `docs/TESTING.md`. Fix whatever it turns up;
    for a fix release bump the version in all three files, add a CHANGELOG section, and
