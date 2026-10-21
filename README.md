@@ -176,6 +176,7 @@ git tag v0.1.0 && git push --tags
 
 The release workflow checks that the tag matches the app version, runs the tests, builds on
 Windows, and publishes the installer, the portable exe, and `SHA256SUMS.txt` to a GitHub release.
+Before tagging, run the manual checklist in [`docs/TESTING.md`](docs/TESTING.md).
 
 ## License
 
