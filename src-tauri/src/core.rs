@@ -33,11 +33,16 @@ pub struct Tracked {
     pub failures: u32,
     /// Unix ms before which automatic refreshes are held back.
     pub next_allowed_at: i64,
+    /// The provider asked Quota to slow down; kept even while fallback data is shown.
+    pub rate_limited: bool,
+    /// Bumped when the provider's configuration changes, so results from requests
+    /// started before the change are discarded.
+    pub generation: u64,
 }
 
 impl Tracked {
     fn new(id: ProviderId) -> Self {
-        Self { state: ProviderState::new(id), failures: 0, next_allowed_at: 0 }
+        Self { state: ProviderState::new(id), failures: 0, next_allowed_at: 0, rate_limited: false, generation: 0 }
     }
 }
 
@@ -63,6 +68,8 @@ pub struct Core {
     pub overlay: Mutex<OverlayState>,
     pub launch_at_startup: AtomicBool,
     first_run: bool,
+    /// Serializes usage cache writes.
+    cache_lock: Mutex<()>,
 }
 
 #[derive(Debug, Default)]
@@ -131,7 +138,7 @@ pub fn should_refresh(
         return false;
     }
     let held_back = !local_only && now < tracked.next_allowed_at;
-    let rate_limited = matches!(state.status, ProviderStatus::RateLimited { .. });
+    let rate_limited = tracked.rate_limited || matches!(state.status, ProviderStatus::RateLimited { .. });
     match reason {
         // Users may retry errors manually, but a provider's rate limit is always respected.
         Reason::Manual => !(held_back && rate_limited),
@@ -159,7 +166,8 @@ pub fn backoff_ms(id: ProviderId, err: &ProviderError, failures: u32) -> i64 {
     };
     let exponential = base.saturating_mul(1i64 << failures.saturating_sub(1).min(10)).min(cap);
     match err {
-        ProviderError::RateLimited { retry_after_secs: Some(secs) } => ((*secs).max(60) * 1000).min(60 * 60_000),
+        // Honor the provider's own deadline, even a long one (capped at a day as a safety net).
+        ProviderError::RateLimited { retry_after_secs: Some(secs) } => (*secs).clamp(60, 24 * 3600) * 1000,
         ProviderError::RateLimited { retry_after_secs: None } => exponential.max(5 * 60_000).min(cap),
         // Waiting on the user (sign in, install, consent): re-check cheaply and regularly.
         ProviderError::NotInstalled
@@ -171,6 +179,60 @@ pub fn backoff_ms(id: ProviderId, err: &ProviderError, failures: u32) -> i64 {
         ProviderError::Network(_) | ProviderError::Other(_) => exponential,
     }
 }
+
+/// Records a refresh result. Returns whether the usage cache needs saving.
+fn apply_result(
+    tracked: &mut Tracked,
+    id: ProviderId,
+    result: Result<Usage, ProviderError>,
+    fallback: Option<Usage>,
+    now: i64,
+) -> bool {
+    let mut save = false;
+    tracked.state.refreshing = false;
+    match result {
+        Ok(usage) => {
+            tracked.state.status = ProviderStatus::Ready;
+            tracked.state.usage = Some(usage);
+            tracked.failures = 0;
+            tracked.next_allowed_at = 0;
+            tracked.rate_limited = false;
+            save = true;
+        }
+        Err(err) => {
+            tracked.failures = tracked.failures.saturating_add(1);
+            let delay = backoff_ms(id, &err, tracked.failures);
+            tracked.next_allowed_at = now + delay;
+            tracked.rate_limited = matches!(err, ProviderError::RateLimited { .. });
+            let retry_at = tracked.rate_limited.then_some(now + delay);
+            tracked.state.status = err.to_status(now, retry_at);
+            // Signed out / not installed: old numbers belong to a session that no longer exists.
+            if matches!(
+                err,
+                ProviderError::NotInstalled | ProviderError::SignedOut(_) | ProviderError::NeedsConsent
+            ) {
+                tracked.state.usage = None;
+                save = true;
+            }
+            // Status line data newer than what's shown replaces it. The endpoint's
+            // backoff stays in place; if that data is recent the card shows it as
+            // current, otherwise the endpoint's error stays visible beside it.
+            let newer = |u: &Usage| tracked.state.usage.as_ref().is_none_or(|cur| u.fetched_at > cur.fetched_at);
+            if let Some(usage) = fallback.filter(|u| newer(u) && !matches!(err, ProviderError::NotInstalled)) {
+                if now - usage.fetched_at < FALLBACK_FRESH_MS {
+                    tracked.state.status = ProviderStatus::Ready;
+                }
+                tracked.state.usage = Some(usage);
+                save = true;
+            }
+        }
+    }
+    save
+}
+
+/// Status line data younger than this counts as current when it stands in for a
+/// failed usage endpoint request.
+const FALLBACK_FRESH_MS: i64 = 15 * 60_000;
 
 /// True when a window's reset time has passed since the data was fetched.
 pub fn has_reset_since_fetch(usage: &Usage, now: i64) -> bool {
@@ -209,6 +271,7 @@ impl Core {
             overlay: Mutex::new(OverlayState { height: 320.0, ..Default::default() }),
             launch_at_startup: AtomicBool::new(false),
             first_run,
+            cache_lock: Mutex::new(()),
         })
     }
 
@@ -261,12 +324,11 @@ impl Core {
     }
 
     /// Forgets a provider's data and backoff (used when its source changes).
+    /// A request still in flight belongs to the old configuration; its result is discarded.
     pub fn reset_provider(&self, id: ProviderId) {
         let mut providers = self.providers.lock().unwrap();
-        let refreshing = providers.get(&id).is_some_and(|t| t.state.refreshing);
-        let mut fresh = Tracked::new(id);
-        fresh.state.refreshing = refreshing;
-        providers.insert(id, fresh);
+        let generation = providers.get(&id).map_or(0, |t| t.generation) + 1;
+        providers.insert(id, Tracked { generation, ..Tracked::new(id) });
         drop(providers);
         self.save_cache();
     }
@@ -284,7 +346,7 @@ impl Core {
         }
         let settings = self.settings();
         let local_only = self.is_local_only(id);
-        {
+        let generation = {
             let mut providers = self.providers.lock().unwrap();
             let Some(tracked) = providers.get_mut(&id) else { return };
             let now = now_ms();
@@ -293,7 +355,8 @@ impl Core {
             }
             tracked.state.refreshing = true;
             tracked.state.last_attempt_at = Some(now);
-        }
+            tracked.generation
+        };
         self.emit_state();
 
         tauri::async_runtime::spawn(async move {
@@ -301,41 +364,26 @@ impl Core {
                 ProviderId::Codex => codex::fetch(settings.codex_path.clone()).await,
                 ProviderId::Claude => claude::fetch(&settings).await,
             };
-            self.apply(id, result);
+            // When Claude's usage endpoint fails, Claude Code's own status line
+            // report (if enabled and newer than what's shown) can stand in.
+            let fallback = (id == ProviderId::Claude && settings.claude_status_line && result.is_err())
+                .then(|| statusline::read_snapshot(&paths::statusline_snapshot_file()))
+                .flatten()
+                .and_then(|s| s.to_usage());
+            self.apply(id, generation, result, fallback);
         });
     }
 
-    fn apply(&self, id: ProviderId, result: Result<Usage, ProviderError>) {
+    fn apply(&self, id: ProviderId, generation: u64, result: Result<Usage, ProviderError>, fallback: Option<Usage>) {
         let now = now_ms();
-        let mut save = false;
+        let save;
         {
             let mut providers = self.providers.lock().unwrap();
             let Some(tracked) = providers.get_mut(&id) else { return };
-            tracked.state.refreshing = false;
-            match result {
-                Ok(usage) => {
-                    tracked.state.status = ProviderStatus::Ready;
-                    tracked.state.usage = Some(usage);
-                    tracked.failures = 0;
-                    tracked.next_allowed_at = 0;
-                    save = true;
-                }
-                Err(err) => {
-                    tracked.failures = tracked.failures.saturating_add(1);
-                    let delay = backoff_ms(id, &err, tracked.failures);
-                    tracked.next_allowed_at = now + delay;
-                    let retry_at = matches!(err, ProviderError::RateLimited { .. }).then_some(now + delay);
-                    tracked.state.status = err.to_status(now, retry_at);
-                    // Signed out / not installed: old numbers belong to a session that no longer exists.
-                    if matches!(
-                        err,
-                        ProviderError::NotInstalled | ProviderError::SignedOut(_) | ProviderError::NeedsConsent
-                    ) {
-                        tracked.state.usage = None;
-                        save = true;
-                    }
-                }
+            if tracked.generation != generation {
+                return; // Started before the provider's configuration changed.
             }
+            save = apply_result(tracked, id, result, fallback, now);
         }
         if save {
             self.save_cache();
@@ -374,6 +422,8 @@ impl Core {
     }
 
     fn save_cache(&self) {
+        // One writer at a time, so an older snapshot can't land after a newer one.
+        let _writing = self.cache_lock.lock().unwrap();
         let providers = self.providers.lock().unwrap();
         let cache: HashMap<ProviderId, Usage> =
             providers.iter().filter_map(|(id, t)| t.state.usage.clone().map(|u| (*id, u))).collect();
@@ -458,6 +508,58 @@ mod tests {
             fetched_at,
             blocked: false,
         }
+    }
+
+    fn bridge(fetched_at: i64) -> Usage {
+        Usage { source: UsageSource::ClaudeStatusLine, ..usage(fetched_at) }
+    }
+
+    #[test]
+    fn status_line_fallback_keeps_the_endpoints_rate_limit() {
+        let now = 50_000_000;
+        let mut t = tracked(ProviderId::Claude);
+        t.state.usage = Some(usage(now - 600_000));
+        let limited = Err(ProviderError::RateLimited { retry_after_secs: Some(1800) });
+        apply_result(&mut t, ProviderId::Claude, limited, Some(bridge(now - 60_000)), now);
+        // Fresh status line data is shown as current...
+        assert_eq!(t.state.status, ProviderStatus::Ready);
+        assert_eq!(t.state.usage.as_ref().unwrap().source, UsageSource::ClaudeStatusLine);
+        // ...but Anthropic's Retry-After still holds every kind of refresh back.
+        assert_eq!(t.next_allowed_at, now + 1_800_000);
+        assert!(t.rate_limited);
+        for reason in [Reason::Open, Reason::Timer, Reason::Manual] {
+            assert!(!should_refresh(ProviderId::Claude, &t, reason, now + 600_000, Some(300), false), "{reason:?}");
+        }
+        assert!(should_refresh(ProviderId::Claude, &t, Reason::Open, now + 1_800_001, Some(300), false));
+    }
+
+    #[test]
+    fn status_line_fallback_never_replaces_newer_data_or_hides_errors() {
+        let now = 50_000_000;
+        let mut t = tracked(ProviderId::Claude);
+        t.state.usage = Some(usage(now - 60_000));
+        let failed = || Err(ProviderError::Network("offline".into()));
+        // Older than what's shown: ignored.
+        apply_result(&mut t, ProviderId::Claude, failed(), Some(bridge(now - 3_600_000)), now);
+        assert_eq!(t.state.usage.as_ref().unwrap().source, UsageSource::CodexAppServer);
+        assert!(matches!(t.state.status, ProviderStatus::Error { .. }));
+
+        // Newer but not recent: shown, with the endpoint's error kept visible.
+        let mut t = tracked(ProviderId::Claude);
+        t.state.usage = Some(usage(now - 7_200_000));
+        apply_result(&mut t, ProviderId::Claude, failed(), Some(bridge(now - 3_600_000)), now);
+        assert_eq!(t.state.usage.as_ref().unwrap().fetched_at, now - 3_600_000);
+        assert!(matches!(t.state.status, ProviderStatus::Error { .. }));
+    }
+
+    #[test]
+    fn success_clears_the_rate_limit() {
+        let mut t = tracked(ProviderId::Claude);
+        t.rate_limited = true;
+        t.next_allowed_at = i64::MAX;
+        apply_result(&mut t, ProviderId::Claude, Ok(usage(1)), None, 2);
+        assert!(!t.rate_limited);
+        assert_eq!(t.next_allowed_at, 0);
     }
 
     #[test]

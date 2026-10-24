@@ -14,7 +14,7 @@ use serde_json::{Map, Value};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use crate::model::{remaining_percent, reset_passed, LimitWindow, Usage, UsageSource};
+use crate::model::{remaining_label, reset_passed, LimitWindow, Usage, UsageSource};
 use crate::paths;
 
 pub const BRIDGE_FLAG: &str = "--quota-statusline";
@@ -106,7 +106,7 @@ pub fn render_line(input: &Value, snapshot: Option<&Snapshot>, now_ms: i64) -> S
         for (label, window) in [("5h", &s.five_hour), ("week", &s.seven_day)] {
             match window {
                 Some(w) if w.has_reset(now_ms) => parts.push(format!("{label} reset")),
-                Some(w) => parts.push(format!("{label} {}% left", remaining_percent(w.used_percentage))),
+                Some(w) => parts.push(format!("{label} {} left", remaining_label(w.used_percentage))),
                 None => {}
             }
         }
@@ -225,6 +225,24 @@ pub fn install(claude_dir: &Path, exe: &Path) -> Result<(), String> {
     write_settings(&path, &map)
 }
 
+/// Points Quota's status line entry at `exe` if it names another path (the portable
+/// exe was moved, or an update installed elsewhere). Returns whether anything changed.
+pub fn repair(claude_dir: &Path, exe: &Path) -> Result<bool, String> {
+    let path = settings_path(claude_dir);
+    let mut map = read_settings(&path)?;
+    if !is_ours(&map) {
+        return Ok(false);
+    }
+    let command = bridge_command(exe);
+    let entry = map.get_mut("statusLine").and_then(Value::as_object_mut).expect("checked by is_ours");
+    if entry.get("command").and_then(Value::as_str) == Some(command.as_str()) {
+        return Ok(false);
+    }
+    entry.insert("command".into(), Value::from(command));
+    write_settings(&path, &map)?;
+    Ok(true)
+}
+
 pub fn uninstall(claude_dir: &Path) -> Result<(), String> {
     let path = settings_path(claude_dir);
     if !path.exists() {
@@ -257,6 +275,23 @@ mod tests {
                 "seven_day": { "used_percentage": 41.2, "resets_at": 1_738_857_600 }
             }
         })
+    }
+
+    #[test]
+    fn repair_follows_a_moved_exe_and_leaves_other_lines_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let claude = dir.path();
+        install(claude, Path::new("/old/place/quota")).unwrap();
+        assert!(repair(claude, Path::new("/new/place/quota")).unwrap());
+        let saved: Value = serde_json::from_slice(&std::fs::read(claude.join("settings.json")).unwrap()).unwrap();
+        assert_eq!(saved["statusLine"]["command"], "/new/place/quota --quota-statusline");
+        assert_eq!(saved["statusLine"]["padding"], 0);
+        assert!(!repair(claude, Path::new("/new/place/quota")).unwrap());
+
+        let custom = r#"{"statusLine":{"type":"command","command":"my-line.sh"}}"#;
+        std::fs::write(claude.join("settings.json"), custom).unwrap();
+        assert!(!repair(claude, Path::new("/new/place/quota")).unwrap());
+        assert_eq!(std::fs::read_to_string(claude.join("settings.json")).unwrap(), custom);
     }
 
     #[test]

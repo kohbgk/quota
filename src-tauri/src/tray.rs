@@ -6,7 +6,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::core::{AppSnapshot, Core, Reason};
-use crate::model::{remaining_percent, ProviderStatus, ProviderState};
+use crate::model::{remaining_label, ProviderStatus, ProviderState};
 use crate::settings::Settings;
 
 const TRAY_ID: &str = "quota";
@@ -87,8 +87,8 @@ fn summary(p: &ProviderState, settings: &Settings, now_ms: i64) -> Option<String
     if window.has_reset(now_ms) {
         return Some(format!("{name}: {label} limit reset"));
     }
-    let left = remaining_percent(window.used_percent);
-    Some(format!("{name}: {left}% left ({label})"))
+    let left = remaining_label(window.used_percent);
+    Some(format!("{name}: {left} left ({label})"))
 }
 
 /// Keeps the tray tooltip useful at a glance.

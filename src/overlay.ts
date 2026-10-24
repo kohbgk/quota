@@ -129,10 +129,10 @@ function fillRow(el: HTMLElement, row: RowVM) {
   el.className = "row";
   if (row.kind === "value") {
     el.classList.add(row.level);
-    el.querySelector<HTMLElement>('[data-f="pct"]')!.textContent = `${row.remaining}%`;
+    el.querySelector<HTMLElement>('[data-f="pct"]')!.textContent = row.display;
     const bar = el.querySelector<HTMLElement>(".bar")!;
     bar.setAttribute("aria-valuenow", String(row.remaining));
-    bar.setAttribute("aria-valuetext", `${row.remaining}% left`);
+    bar.setAttribute("aria-valuetext", `${row.display} left`);
     const fill = el.querySelector<HTMLElement>(".bar-fill")!;
     // Let the first paint happen at 0 so new bars animate in.
     requestAnimationFrame(() => (fill.style.width = `${row.remaining}%`));
@@ -159,6 +159,13 @@ function fillCard(el: HTMLElement, card: CardVM) {
   for (const row of card.rows) {
     const rowEl = el.querySelector<HTMLElement>(`.row[data-key="${row.key}"]`);
     if (rowEl) fillRow(rowEl, row);
+  }
+  // The card's structure is rebuilt only when its shape changes; keep message text
+  // (error details, retry countdowns) current in between.
+  const body = el.querySelector<HTMLElement>(".msg-body");
+  if (body && card.message && body.dataset.text !== card.message.body) {
+    body.dataset.text = card.message.body;
+    body.innerHTML = inlineCode(card.message.body);
   }
 }
 

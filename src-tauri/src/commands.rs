@@ -141,15 +141,20 @@ pub fn set_claude_usage_endpoint(core: CoreState, enabled: bool) -> Result<AppSn
 #[tauri::command]
 pub fn set_claude_status_line(core: CoreState, enabled: bool) -> Result<AppSnapshot, String> {
     let dir = claude::config_dir().ok_or("Couldn't find your home folder.")?;
+    let exe = std::env::current_exe().map_err(|_| "Couldn't locate Quota's executable.".to_string())?;
     if enabled {
-        let exe = std::env::current_exe().map_err(|_| "Couldn't locate Quota's executable.".to_string())?;
         statusline::install(&dir, &exe)?;
     } else {
         statusline::uninstall(&dir)?;
+    }
+    if core.modify_settings(|s| s.claude_status_line = enabled).is_err() {
+        // Undo the change to Claude Code's settings so both sides still agree.
+        let _ = if enabled { statusline::uninstall(&dir) } else { statusline::install(&dir, &exe) };
+        return Err("Couldn't save settings.".to_string());
+    }
+    if !enabled {
         let _ = std::fs::remove_file(crate::paths::statusline_snapshot_file());
     }
-    core.modify_settings(|s| s.claude_status_line = enabled)
-        .map_err(|_| "Couldn't save settings.".to_string())?;
     core.reset_provider(ProviderId::Claude);
     core.inner().clone().refresh(ProviderId::Claude, Reason::Startup);
     core.emit_state();

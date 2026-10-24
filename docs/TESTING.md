@@ -27,6 +27,9 @@ clippy and the build. These cover what only a real desktop can.
       Hide and reopen, then restart Quota: it comes back to the same spot. Drag it to the other monitor:
       it reopens there. Settings → General → Position → Reset puts it back in the default spot.
 - [ ] Click outside the overlay right after Quota starts (before clicking the overlay itself): it hides.
+- [ ] A small or high-scaling screen (e.g. 1366×768 at 150%): the overlay and Settings fit on screen and scroll.
+- [ ] While recording a new shortcut, close Settings: the old shortcut still works.
+- [ ] Toggle several settings quickly: none flips back after a moment.
 - [ ] The overlay's settings button and the tray's Settings… both open Settings every time; a double-click opens one window.
 - [ ] Tray left-click toggles; right-click menu: Show Quota, Refresh now, Settings…, Quit Quota. Tooltip shows usage left.
 

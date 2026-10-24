@@ -18,7 +18,8 @@ let recording = false;
 let shortcutMessage: { text: string; error: boolean } | null = null;
 const busy = new Set<string>();
 
-const sw = (id: string) => `<button class="switch" role="switch" id="${id}" aria-checked="false"></button>`;
+const sw = (id: string, label: string) =>
+  `<button class="switch" role="switch" id="${id}" aria-checked="false" aria-label="${label}"></button>`;
 const item = (title: string, desc: string, control: string, extra = "") =>
   `<div class="item"${extra}><div class="item-text"><div class="item-title">${title}</div><div class="item-desc">${desc}</div></div>${control}</div>`;
 
@@ -33,12 +34,12 @@ app.innerHTML = `
       <section id="overlay" aria-labelledby="h-overlay">
         <h2 id="h-overlay">Overlay</h2>
         <div class="group">
-          ${item("5-hour limits", "Usage in the current rolling 5-hour window", sw("showFiveHour"))}
-          ${item("Weekly limits", "Usage in the current 7-day window", sw("showWeekly"))}
+          ${item("5-hour limits", "Usage in the current rolling 5-hour window", sw("showFiveHour", "Show 5-hour limits"))}
+          ${item("Weekly limits", "Usage in the current 7-day window", sw("showWeekly", "Show weekly limits"))}
         </div>
         <div class="group">
-          ${item("Codex", '<span id="codexSummary"></span>', sw("showCodex"))}
-          ${item("Claude Code", '<span id="claudeSummary"></span>', sw("showClaude"))}
+          ${item("Codex", '<span id="codexSummary"></span>', sw("showCodex", "Show Codex"))}
+          ${item("Claude Code", '<span id="claudeSummary"></span>', sw("showClaude", "Show Claude Code"))}
         </div>
       </section>
 
@@ -88,7 +89,7 @@ app.innerHTML = `
                 <div class="item-title">Use Claude Code's sign-in <span class="tag accent">Recommended</span></div>
                 <div class="item-desc">Asks Anthropic for your plan's 5-hour and weekly usage, anytime.</div>
               </div>
-              ${sw("claudeEndpoint")}
+              ${sw("claudeEndpoint", "Use Claude Code's sign-in")}
             </div>
             <ul class="points">
               <li>${icons.info}<span>Uses an undocumented Anthropic endpoint, so it may stop working if Anthropic changes it.</span></li>
@@ -102,7 +103,7 @@ app.innerHTML = `
                 <div class="item-title">Status line bridge</div>
                 <div class="item-desc" id="bridgeDesc">Uses the rate limits Claude Code reports to status line commands, Anthropic's documented interface. Updates only while you use Claude Code.</div>
               </div>
-              ${sw("claudeBridge")}
+              ${sw("claudeBridge", "Status line bridge")}
             </div>
           </div>
         </div>
@@ -111,8 +112,8 @@ app.innerHTML = `
       <section id="general" aria-labelledby="h-general">
         <h2 id="h-general">General</h2>
         <div class="group">
-          ${item("Launch at startup", "Start Quota quietly when you sign in to Windows", sw("launchAtStartup"))}
-          ${item("Hide when clicking outside", "Dismiss the overlay when it loses focus", sw("hideOnBlur"))}
+          ${item("Launch at startup", "Start Quota quietly when you sign in to Windows", sw("launchAtStartup", "Launch at startup"))}
+          ${item("Hide when clicking outside", "Dismiss the overlay when it loses focus", sw("hideOnBlur", "Hide when clicking outside"))}
           ${item("Position", '<span id="positionDesc"></span>', '<button class="btn secondary" id="resetPosition">Reset</button>')}
           ${item(
             "Appearance",
@@ -281,18 +282,43 @@ async function loadDetails() {
 
 // ---------- Actions ----------
 
-async function saveSettings(patch: Partial<Settings>) {
-  if (!snapshot) return;
-  const next = { ...snapshot.settings, ...patch };
-  snapshot = { ...snapshot, settings: next }; // optimistic
+// Saves run one at a time, and each sends every change made so far, so quick
+// successive changes can't undo each other. State arriving while saves are
+// still pending keeps those changes (see `adopt`).
+let pendingSaves = 0;
+let unsaved: Partial<Settings> = {};
+let saveQueue: Promise<unknown> = Promise.resolve();
+
+/** Takes new backend state without dropping changes that are still being saved. */
+function adopt(next: AppSnapshot) {
+  snapshot = pendingSaves ? { ...next, settings: { ...next.settings, ...unsaved } } : next;
+}
+
+/** Saves a change; resolves to whether it was saved. */
+function saveSettings(patch: Partial<Settings>): Promise<boolean> {
+  if (!snapshot) return Promise.resolve(false);
+  unsaved = { ...unsaved, ...patch };
+  snapshot = { ...snapshot, settings: { ...snapshot.settings, ...patch } }; // optimistic
+  pendingSaves++;
   render();
-  try {
-    snapshot = await api.updateSettings(next);
-  } catch (err) {
-    toast(errorText(err), true);
-    snapshot = await api.getState();
-  }
-  render();
+  const save = saveQueue.then(async () => {
+    let ok = true;
+    let next: AppSnapshot | null = null;
+    try {
+      next = await api.updateSettings(snapshot!.settings);
+    } catch (err) {
+      ok = false;
+      toast(errorText(err), true);
+      next = await api.getState().catch(() => null);
+    }
+    pendingSaves--;
+    if (!pendingSaves) unsaved = {};
+    if (next) adopt(next);
+    render();
+    return ok;
+  });
+  saveQueue = save;
+  return save;
 }
 
 async function withBusy(id: string, action: () => Promise<void>) {
@@ -308,7 +334,7 @@ async function withBusy(id: string, action: () => Promise<void>) {
   }
 }
 
-const toggles: Record<string, (on: boolean) => Promise<void>> = {
+const toggles: Record<string, (on: boolean) => Promise<unknown>> = {
   showFiveHour: (on) => saveSettings({ showFiveHour: on }),
   showWeekly: (on) => saveSettings({ showWeekly: on }),
   showCodex: (on) => saveSettings({ showCodex: on }),
@@ -321,12 +347,12 @@ const toggles: Record<string, (on: boolean) => Promise<void>> = {
     }),
   claudeEndpoint: (on) =>
     withBusy("claudeEndpoint", async () => {
-      snapshot = await api.setClaudeUsageEndpoint(on);
+      adopt(await api.setClaudeUsageEndpoint(on));
       toast(on ? "Claude Code usage connected" : "Stopped reading Claude usage with your sign-in");
     }),
   claudeBridge: (on) =>
     withBusy("claudeBridge", async () => {
-      snapshot = await api.setClaudeStatusLine(on);
+      adopt(await api.setClaudeStatusLine(on));
       await loadDetails();
       toast(on ? "Status line bridge installed" : "Status line bridge removed");
     }),
@@ -359,7 +385,7 @@ $("resetPosition").addEventListener("click", async () => {
 $("codexPathForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const value = $<HTMLInputElement>("codexPathInput").value.trim();
-  await saveSettings({ codexPath: value || null });
+  if (!(await saveSettings({ codexPath: value || null }))) return;
   await loadDetails();
   toast(value ? "Codex path saved" : "Using automatic detection");
 });
@@ -390,7 +416,7 @@ async function applyShortcut(accelerator: string) {
     shortcutMessage = { text: errorText(err), error: true };
     await api.pauseShortcut(false).catch(() => {});
   }
-  snapshot = await api.getState();
+  adopt(await api.getState());
   render();
 }
 
@@ -455,7 +481,7 @@ function openSection(section: string) {
 async function start() {
   try {
     await api.onState((s) => {
-      snapshot = s;
+      adopt(s);
       render();
     });
     await api.on<string>("quota://open-section", (section) => openSection(section));

@@ -173,11 +173,21 @@ pub fn set_height(app: &AppHandle, height: f64) {
     let core = core(app);
     core.overlay.lock().unwrap().height = height;
     if let Some(win) = window(app) {
+        let height = match win.current_monitor() {
+            Ok(Some(monitor)) => fit_height(height, &monitor),
+            _ => height,
+        };
         let _ = win.set_size(LogicalSize::new(WIDTH, height));
         if win.is_visible().unwrap_or(false) {
             keep_on_screen(&core, &win, height);
         }
     }
+}
+
+/// Caps the overlay at its monitor's usable height; beyond that the page scrolls.
+fn fit_height(height: f64, monitor: &Monitor) -> f64 {
+    let available = monitor.work_area().size.height as f64 / monitor.scale_factor();
+    height.min(available.floor()).max(120.0)
 }
 
 // ---------- Placement ----------
@@ -238,6 +248,7 @@ fn place_on_active_monitor(app: &AppHandle, win: &WebviewWindow) {
         .or_else(|| app.primary_monitor().ok().flatten());
     let Some(monitor) = monitor else { return };
 
+    let height = fit_height(height, &monitor);
     let (x, y) = place_in(Area::of(&monitor), size_px(height, monitor.scale_factor()), &pos);
     {
         let mut overlay = core.overlay.lock().unwrap();
@@ -337,7 +348,11 @@ pub fn remember_position(app: &AppHandle) {
     }
     let position = OverlayPosition {
         monitor: monitor.name().cloned(),
-        ..position_in(Area::of(&monitor), size_px(height, monitor.scale_factor()), (top_left.x, top_left.y))
+        ..position_in(
+            Area::of(&monitor),
+            size_px(fit_height(height, &monitor), monitor.scale_factor()),
+            (top_left.x, top_left.y),
+        )
     };
     if core.settings().overlay_position.as_ref() == Some(&position) {
         return;
@@ -416,6 +431,14 @@ pub fn open_settings(app: &AppHandle, section: Option<String>) {
         core(&app).overlay.lock().unwrap().settings_opening = false;
         match built {
             Ok(win) => {
+                // Recording a new shortcut releases the current one. If the window
+                // closes mid-recording, make sure the saved shortcut works again.
+                let app_for_events = app.clone();
+                win.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Destroyed = event {
+                        crate::shortcut::register_saved(&app_for_events);
+                    }
+                });
                 center_on_active_monitor(&app, &win, 600.0, 680.0);
                 // The page shows itself once it has painted. If it hasn't after a
                 // moment, show it anyway rather than leave an invisible window.
@@ -441,7 +464,7 @@ fn build_settings(app: &AppHandle, section: Option<String>) -> tauri::Result<Web
     tauri::WebviewWindowBuilder::new(app, SETTINGS, tauri::WebviewUrl::App(url.into()))
         .title("Quota Settings")
         .inner_size(600.0, 680.0)
-        .min_inner_size(520.0, 480.0)
+        .min_inner_size(420.0, 360.0)
         .resizable(true)
         .maximizable(false)
         .decorations(false)
@@ -463,12 +486,14 @@ fn center_on_active_monitor(app: &AppHandle, win: &WebviewWindow, width: f64, he
     };
     let scale = monitor.scale_factor();
     let area = monitor.work_area();
+    // Never larger than the monitor's usable area (small screens, high scaling);
+    // the settings page scrolls inside.
     let w = ((width * scale) as i32).min(area.size.width as i32);
     let h = ((height * scale) as i32).min(area.size.height as i32);
     let x = area.position.x + (area.size.width as i32 - w) / 2;
     let y = area.position.y + (area.size.height as i32 - h) / 2;
     let _ = win.set_position(PhysicalPosition::new(x, y));
-    let _ = win.set_size(LogicalSize::new(width, height));
+    let _ = win.set_size(LogicalSize::new(w as f64 / scale, h as f64 / scale));
 }
 
 #[cfg(test)]

@@ -150,8 +150,13 @@ describe("overlay view model", () => {
 
   it("says when a limit is used up", () => {
     const vm = buildOverlay(snap([p("codex", { kind: "ready" }, usage(100, 10)), ready()[1]!]), NOW);
-    expect(vm.cards[0]!.rows[0]).toMatchObject({ kind: "value", remaining: 0, reset: "Limit reached · resets in 1h" });
+    expect(vm.cards[0]!.rows[0]).toMatchObject({ kind: "value", remaining: 0, display: "0%", reset: "Limit reached · resets in 1h" });
     expect(vm.cards[0]!.rows[1]).toMatchObject({ reset: expect.stringMatching(/^Resets /) });
+  });
+
+  it("shows a sliver as <1% instead of claiming the limit is reached", () => {
+    const vm = buildOverlay(snap([p("codex", { kind: "ready" }, usage(99.6, 10)), ready()[1]!]), NOW);
+    expect(vm.cards[0]!.rows[0]).toMatchObject({ kind: "value", remaining: 0, display: "<1%", reset: "Resets in 1h" });
   });
 
   it("falls back to the oldest shown data for the footer when nothing is current", () => {

@@ -7,7 +7,17 @@ import type { AppSnapshot, LimitWindow, ProviderId, ProviderState, Settings, Usa
 export type WindowKey = "fiveHour" | "weekly";
 
 export type RowVM =
-  | { key: WindowKey; label: string; kind: "value"; remaining: number; level: Level; reset: string; resetTitle: string }
+  | {
+      key: WindowKey;
+      label: string;
+      kind: "value";
+      remaining: number;
+      /** What the row shows: "38%", or "<1%" when a sliver is left. */
+      display: string;
+      level: Level;
+      reset: string;
+      resetTitle: string;
+    }
   | { key: WindowKey; label: string; kind: "missing"; note: string }
   | { key: WindowKey; label: string; kind: "reset"; note: string }
   | { key: WindowKey; label: string; kind: "loading" };
@@ -86,8 +96,11 @@ function rowFor(key: WindowKey, window: LimitWindow | null, id: ProviderId, now:
   } else {
     reset = "Reset time not reported";
   }
-  if (remaining === 0) reset = `Limit reached · ${reset[0]!.toLowerCase()}${reset.slice(1)}`;
-  return { key, label, kind: "value", remaining, level: levelFor(remaining), reset, resetTitle };
+  // Rounding down shows 0% while a sliver is left; only a fully used window is "reached".
+  const reached = window.usedPercent >= 100;
+  if (reached) reset = `Limit reached · ${reset[0]!.toLowerCase()}${reset.slice(1)}`;
+  const display = remaining === 0 && !reached ? "<1%" : `${remaining}%`;
+  return { key, label, kind: "value", remaining, display, level: levelFor(remaining), reset, resetTitle };
 }
 
 function sourceBadge(usage: Usage | null): { badge: string | null; title?: string } {

@@ -73,6 +73,7 @@ pub fn run(start_hidden: bool) {
                 });
             }
 
+            sync_status_line_bridge(&core);
             shortcut::register_saved(&handle);
             tray::create(&handle)?;
             core.start_ticker();
@@ -100,6 +101,26 @@ pub fn run(start_hidden: bool) {
             }
             let _ = app;
         });
+}
+
+/// Keeps the Claude Code status line bridge in step with reality at startup: it follows
+/// a moved exe, and if the entry was removed outside Quota, the setting turns off.
+fn sync_status_line_bridge(core: &Core) {
+    if !core.settings().claude_status_line {
+        return;
+    }
+    let (Some(dir), Ok(exe)) = (providers::claude::config_dir(), std::env::current_exe()) else { return };
+    match providers::statusline::state(&dir) {
+        providers::statusline::BridgeState::Installed => {
+            if let Err(err) = providers::statusline::repair(&dir, &exe) {
+                log::warn!("couldn't update the status line bridge: {err}");
+            }
+        }
+        providers::statusline::BridgeState::Available => {
+            let _ = core.modify_settings(|s| s.claude_status_line = false);
+        }
+        _ => {}
+    }
 }
 
 /// Removes Quota's integrations. Run by the uninstaller.

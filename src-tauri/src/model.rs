@@ -158,6 +158,15 @@ pub fn remaining_percent(used_percent: f64) -> i64 {
     (100.0 - used + 1e-9).floor().clamp(0.0, 100.0) as i64
 }
 
+/// "38%" style text for what's left; "<1%" when rounding down would show 0% but the
+/// window isn't fully used.
+pub fn remaining_label(used_percent: f64) -> String {
+    match remaining_percent(used_percent) {
+        0 if used_percent < 100.0 => "<1%".into(),
+        left => format!("{left}%"),
+    }
+}
+
 /// Removes anything that looks like a secret from text before it is shown or logged.
 pub fn redact(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -200,6 +209,9 @@ mod tests {
         assert_eq!(remaining_percent(28.0), 72);
         assert_eq!(remaining_percent(100.0), 0);
         assert_eq!(remaining_percent(-5.0), 100);
+        assert_eq!(remaining_label(99.6), "<1%");
+        assert_eq!(remaining_label(100.0), "0%");
+        assert_eq!(remaining_label(23.5), "76%");
     }
 
     #[test]

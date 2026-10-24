@@ -114,24 +114,16 @@ pub fn check_credentials(creds: &Credentials, now_ms: i64) -> Result<(), Provide
 /// Produces Claude usage according to the user's opt-ins.
 pub async fn fetch(settings: &Settings) -> Result<Usage, ProviderError> {
     let Some(dir) = config_dir() else { return Err(ProviderError::NotInstalled) };
+    // With the endpoint on, its result stands; if it fails, the refresh engine may
+    // show status line data instead while keeping the endpoint's backoff.
+    if settings.claude_usage_endpoint {
+        return fetch_from_endpoint(&dir).await;
+    }
     let bridge = settings
         .claude_status_line
         .then(|| statusline::read_snapshot(&crate::paths::statusline_snapshot_file()))
         .flatten()
         .and_then(|s| s.to_usage());
-
-    if settings.claude_usage_endpoint {
-        let endpoint = fetch_from_endpoint(&dir).await;
-        return match (endpoint, bridge) {
-            (Ok(usage), _) => Ok(usage),
-            // The endpoint failed, but Claude Code itself reported usage recently.
-            (Err(err), Some(bridge)) if !matches!(err, ProviderError::NotInstalled) => {
-                log::info!("usage endpoint unavailable ({err:?}); using status line data");
-                Ok(bridge)
-            }
-            (Err(err), _) => Err(err),
-        };
-    }
 
     if !is_installed(&dir) {
         return Err(ProviderError::NotInstalled);
@@ -198,7 +190,7 @@ fn request_usage(creds: &Credentials) -> Result<Usage, ProviderError> {
         .headers()
         .get("retry-after")
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.trim().parse::<i64>().ok());
+        .and_then(|v| parse_retry_after(v, crate::paths::now_ms()));
     let mut body = response.into_body();
     let text = body.with_config().limit(256 * 1024).read_to_string().unwrap_or_default();
 
@@ -215,6 +207,16 @@ fn request_usage(creds: &Credentials) -> Result<Usage, ProviderError> {
         429 => Err(ProviderError::RateLimited { retry_after_secs: retry_after }),
         _ => Err(ProviderError::Other(format!("Anthropic returned HTTP {status}."))),
     }
+}
+
+/// `Retry-After` as seconds from now: either a number of seconds or an HTTP date.
+fn parse_retry_after(value: &str, now_ms: i64) -> Option<i64> {
+    let value = value.trim();
+    if let Ok(secs) = value.parse::<i64>() {
+        return Some(secs.max(0));
+    }
+    let at = chrono::DateTime::parse_from_rfc2822(value).ok()?;
+    Some((at.timestamp() - now_ms / 1000).max(0))
 }
 
 fn parse_window(value: Option<&Value>) -> Option<LimitWindow> {
@@ -249,6 +251,15 @@ pub fn parse_usage_response(value: &Value, plan: Option<String>, now_ms: i64) ->
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn reads_retry_after_seconds_and_dates() {
+        let now = 1_445_412_480_000; // Wed, 21 Oct 2015 07:28:00 GMT
+        assert_eq!(parse_retry_after(" 120 ", now), Some(120));
+        assert_eq!(parse_retry_after("Wed, 21 Oct 2015 09:28:00 GMT", now), Some(7200));
+        assert_eq!(parse_retry_after("Wed, 21 Oct 2015 07:00:00 GMT", now), Some(0));
+        assert_eq!(parse_retry_after("soon", now), None);
+    }
 
     #[test]
     fn parses_usage_response() {

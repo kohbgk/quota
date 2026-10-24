@@ -1,6 +1,14 @@
-html,
-body {
+html {
+  height: 100%;
   overflow: hidden;
+}
+
+/* On screens too short for the whole overlay, the window is capped and the page scrolls. */
+body {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 #app {
