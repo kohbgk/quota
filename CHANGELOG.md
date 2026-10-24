@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.1.4]
+
+More reliability fixes, after checking a list of suggested changes against the code.
+
+**Downloads**
+
+- `Quota_0.1.4_x64-setup.exe`: installer for Windows 10/11 (per-user, no admin needed). Recommended.
+- `Quota_0.1.4_x64-portable.exe`: a single executable. Needs WebView2, which Windows 11 and most
+  Windows 10 PCs already have.
+- `SHA256SUMS.txt`: checksums for both.
+
+The builds aren't code-signed yet, so Windows SmartScreen may warn on first run: choose
+*More info* → *Run anyway*.
+
+**Fixes**
+
+- When Anthropic asks Quota to slow down, Quota now waits as long as asked, even while it shows
+  status line data in the meantime. It also understands date-style `Retry-After` replies and
+  waits longer than an hour when told to.
+- Status line data never replaces newer numbers, and when it's old the reason the sign-in
+  source failed stays visible.
+- Changing the Codex path or turning a Claude source off while a refresh is running no longer
+  lets the old result through.
+- Changing several settings quickly no longer flips earlier changes back, and "Codex path saved"
+  appears only when it was.
+- A sliver of usage left shows as "<1% left" instead of "Limit reached".
+- Error messages and "try again in…" countdowns stay up to date while the overlay is open.
+- Closing Settings while recording a shortcut no longer leaves the shortcut turned off; if
+  saving a new shortcut or the status line bridge fails, the previous state is restored.
+- On small or high-scaling screens, the overlay and Settings fit on screen and scroll.
+- If the portable exe moves, Claude Code's status line follows it.
+- Settings switches have proper screen-reader labels.
+
 ## [0.1.3]
 
 Reliability fixes from a full code review.

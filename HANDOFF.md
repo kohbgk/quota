@@ -61,8 +61,8 @@ src/
 ## Status
 
 Done and verified on Linux:
-- Rust: builds with zero warnings, clippy clean, **46 unit tests pass** (+2 opt-in live tests, `--ignored`).
-- Frontend: `tsc` clean, **29 vitest tests pass**, production build OK.
+- Rust: builds with zero warnings, clippy clean, **51 unit tests pass** (+2 opt-in live tests, `--ignored`).
+- Frontend: `tsc` clean, **30 vitest tests pass**, production build OK.
 - UI reviewed via headless-Chromium screenshots of ~15 overlay states + settings (dark/light).
 - Windows CI green (typecheck, vitest, clippy -D warnings, cargo test, tauri build): https://github.com/kohbgk/quota/actions
 
@@ -123,6 +123,15 @@ placements/nudges (`placed_at`) and moves while hidden. The click-away watcher d
 from the button release (tray long press). Blocked usage is noted alongside other notices.
 The ticker updates the tray when a limit resets with refresh set to on-open. Release workflow
 reads ref names from env vars.
+
+**v0.1.4** (verified items from a user-supplied list of 33 suggestions): provider
+`generation` drops results from before a config change; Claude's status line fallback lives in
+`core::apply_result` and keeps the endpoint's backoff/rate limit (`Tracked.rate_limited`);
+Retry-After HTTP dates; settings page save queue + `adopt`; `<1%`; message text refresh;
+shortcut re-registered when Settings is destroyed; bridge `repair` at startup; overlay height
+capped to the work area (page scrolls); switch aria-labels. Declined or deferred, with reasons
+given to the user: auto-update (needs a signing secret only the owner can add), per-provider
+freshness labels, cooldown hints, diagnostics, a file picker.
 
 Remaining:
 
