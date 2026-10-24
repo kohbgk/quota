@@ -47,7 +47,7 @@ pub fn run(start_hidden: bool) {
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
-            let mut settings = Settings::load();
+            let settings = Settings::load();
             let first_run = !settings.onboarded;
 
             if first_run {
@@ -64,7 +64,7 @@ pub fn run(start_hidden: bool) {
                 let app_for_events = handle.clone();
                 win.on_window_event(move |event| match event {
                     WindowEvent::Focused(false) => overlay::on_blur(&app_for_events),
-                    WindowEvent::Moved(_) => overlay::on_moved(&app_for_events),
+                    WindowEvent::Moved(to) => overlay::on_moved(&app_for_events, *to),
                     WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
                         overlay::hide(&app_for_events);
@@ -85,8 +85,7 @@ pub fn run(start_hidden: bool) {
                 overlay::show(&handle);
             }
             if first_run {
-                settings.onboarded = true;
-                let _ = core.set_settings(settings);
+                let _ = core.modify_settings(|s| s.onboarded = true);
             }
             Ok(())
         })

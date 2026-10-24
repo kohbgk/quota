@@ -95,6 +95,14 @@ describe("overlay view model", () => {
     const vm = buildOverlay(snap([p("codex", { kind: "ready" }, u), ready()[1]!]), NOW);
     expect(vm.cards[0]!.notice).toEqual({ tone: "warn", text: "Included usage isn't available right now" });
     expect(vm.cards[1]!.notice).toBeNull();
+
+    // Still said when the data is also old or couldn't be refreshed.
+    const old = { ...usage(40, 20, 3_600_000), blocked: true };
+    const stale = buildOverlay(snap([p("codex", { kind: "error", message: "offline" }, old), ready()[1]!]), NOW);
+    expect(stale.cards[0]!.notice).toEqual({
+      tone: "warn",
+      text: "Couldn't refresh · showing data from 1h ago · included usage unavailable",
+    });
   });
 
   it("dims stale data and explains why after a failed refresh", () => {

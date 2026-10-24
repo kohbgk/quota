@@ -108,9 +108,8 @@ pub fn change(app: &AppHandle, requested: &str) -> Result<String, String> {
         core.emit_state();
         return Err(err.replace(" Choose a different shortcut in Settings.", " Try a different combination."));
     }
-    let mut settings = core.settings();
-    settings.shortcut = canonical.clone();
-    core.set_settings(settings).map_err(|_| "Couldn't save the shortcut.".to_string())?;
+    core.modify_settings(|s| s.shortcut = canonical.clone())
+        .map_err(|_| "Couldn't save the shortcut.".to_string())?;
     *core.shortcut_error.lock().unwrap() = None;
     crate::tray::update_menu(app);
     core.emit_state();

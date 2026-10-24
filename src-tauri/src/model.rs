@@ -41,8 +41,13 @@ impl LimitWindow {
 
     /// The window's reset time has passed, so its usage numbers are out of date.
     pub fn has_reset(&self, now_ms: i64) -> bool {
-        self.resets_at.is_some_and(|at| at.saturating_mul(1000) <= now_ms)
+        reset_passed(self.resets_at, now_ms)
     }
+}
+
+/// Whether a reset time (Unix seconds) has passed.
+pub fn reset_passed(resets_at: Option<i64>, now_ms: i64) -> bool {
+    resets_at.is_some_and(|at| at.saturating_mul(1000) <= now_ms)
 }
 
 /// Where a usage snapshot came from. Shown to the user so the data is never ambiguous.

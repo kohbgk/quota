@@ -14,7 +14,7 @@ use serde_json::{Map, Value};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use crate::model::{remaining_percent, LimitWindow, Usage, UsageSource};
+use crate::model::{remaining_percent, reset_passed, LimitWindow, Usage, UsageSource};
 use crate::paths;
 
 pub const BRIDGE_FLAG: &str = "--quota-statusline";
@@ -75,7 +75,7 @@ pub fn snapshot_from_input(input: &Value, now_ms: i64) -> Option<Snapshot> {
 
 impl SnapshotWindow {
     fn has_reset(&self, now_ms: i64) -> bool {
-        self.resets_at.is_some_and(|at| at.saturating_mul(1000) <= now_ms)
+        reset_passed(self.resets_at, now_ms)
     }
 }
 

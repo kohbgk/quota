@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, Monitor, PhysicalPosition, WebviewWindow};
 
-use crate::core::{Core, Reason};
+use crate::core::{Core, OverlayState, Reason};
 use crate::paths::now_ms;
 use crate::settings::{OverlayPosition, Theme};
 
@@ -79,7 +79,7 @@ fn watch_outside_clicks(app: &AppHandle, shown_at: i64) {
                 let now = now_ms();
                 // A newer show starts its own watcher; a hide ends this one.
                 let open = overlay.shown_at == shown_at && overlay.hidden_at < shown_at;
-                let busy = now - shown_at < 300 || now - overlay.drag_started_at < 1000 || now - overlay.moved_at < SETTLE_MS;
+                let busy = now - shown_at < 300 || is_moving(&overlay, now);
                 (open, busy)
             };
             if !open {
@@ -101,6 +101,14 @@ fn watch_outside_clicks(app: &AppHandle, shown_at: i64) {
                 && cursor.y < (pos.y + size.height as i32) as f64;
             if !inside {
                 hide(&app);
+                // The tray acts on button release and ignores clicks just after a hide;
+                // date the hide from the release so a long press on the tray icon
+                // doesn't reopen the overlay.
+                let started = now_ms();
+                while button_down() && now_ms() - started < 5000 {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                core.overlay.lock().unwrap().hidden_at = now_ms();
                 return;
             }
         }
@@ -123,7 +131,7 @@ pub fn on_blur(app: &AppHandle) {
     let (just_shown, dragging) = {
         let overlay = core.overlay.lock().unwrap();
         let now = now_ms();
-        (now - overlay.shown_at < 250, now - overlay.drag_started_at < 1000 || now - overlay.moved_at < SETTLE_MS)
+        (now - overlay.shown_at < 250, is_moving(&overlay, now))
     };
     // Ignore the focus churn that can happen right after the window appears.
     if just_shown {
@@ -140,8 +148,7 @@ pub fn on_blur(app: &AppHandle) {
                 std::thread::sleep(Duration::from_millis(250));
                 let core = self::core(&app);
                 let overlay = core.overlay.lock().unwrap();
-                let now = now_ms();
-                if now - overlay.drag_started_at >= 1000 && now - overlay.moved_at >= SETTLE_MS {
+                if !is_moving(&overlay, now_ms()) {
                     break;
                 }
             }
@@ -168,7 +175,7 @@ pub fn set_height(app: &AppHandle, height: f64) {
     if let Some(win) = window(app) {
         let _ = win.set_size(LogicalSize::new(WIDTH, height));
         if win.is_visible().unwrap_or(false) {
-            keep_on_screen(&win, height);
+            keep_on_screen(&core, &win, height);
         }
     }
 }
@@ -243,13 +250,15 @@ fn place_on_active_monitor(app: &AppHandle, win: &WebviewWindow) {
 }
 
 /// Nudges the overlay back inside its monitor after it grew taller.
-fn keep_on_screen(win: &WebviewWindow, height: f64) {
+fn keep_on_screen(core: &Core, win: &WebviewWindow, height: f64) {
     let (Ok(top_left), Ok(Some(monitor))) = (win.outer_position(), win.current_monitor()) else { return };
     let area = Area::of(&monitor);
     let size = size_px(height, monitor.scale_factor());
     let x = top_left.x.clamp(area.x, area.x + (area.width - size.0).max(0));
     let y = top_left.y.clamp(area.y, area.y + (area.height - size.1).max(0));
     if (x, y) != (top_left.x, top_left.y) {
+        // Recorded so `on_moved` doesn't mistake this for the user's chosen spot.
+        core.overlay.lock().unwrap().placed_at = Some((x, y));
         let _ = win.set_position(PhysicalPosition::new(x, y));
     }
 }
@@ -270,12 +279,15 @@ pub fn start_drag(app: &AppHandle) {
 
 /// Called for every overlay move. Once a drag has settled, saves the new spot
 /// right away, so it survives even if Quota isn't closed normally.
-pub fn on_moved(app: &AppHandle) {
+pub fn on_moved(app: &AppHandle, to: PhysicalPosition<i32>) {
     let core = core(app);
     {
         let mut overlay = core.overlay.lock().unwrap();
-        if !overlay.dragged {
-            return; // Moved by Quota, not the user.
+        let hidden = overlay.hidden_at >= overlay.shown_at;
+        // Only the user's drags count: not Quota's own placement, and not moves
+        // Windows makes while the overlay is hidden (display changes).
+        if !overlay.dragged || hidden || overlay.placed_at == Some((to.x, to.y)) {
+            return;
         }
         overlay.moved_at = now_ms();
         if std::mem::replace(&mut overlay.save_pending, true) {
@@ -300,6 +312,13 @@ pub fn on_moved(app: &AppHandle) {
 
 /// How long the overlay must stay put before a drag counts as finished.
 const SETTLE_MS: i64 = 400;
+/// How long after a drag starts focus changes and clicks are treated as part of it.
+const DRAG_GRACE_MS: i64 = 1000;
+
+/// Whether the user is (or was a moment ago) dragging the overlay.
+fn is_moving(overlay: &OverlayState, now: i64) -> bool {
+    now - overlay.drag_started_at < DRAG_GRACE_MS || now - overlay.moved_at < SETTLE_MS
+}
 
 /// Saves where the user dragged the overlay, relative to the monitor it ended up on.
 pub fn remember_position(app: &AppHandle) {
@@ -320,12 +339,10 @@ pub fn remember_position(app: &AppHandle) {
         monitor: monitor.name().cloned(),
         ..position_in(Area::of(&monitor), size_px(height, monitor.scale_factor()), (top_left.x, top_left.y))
     };
-    let mut settings = core.settings();
-    if settings.overlay_position.as_ref() == Some(&position) {
+    if core.settings().overlay_position.as_ref() == Some(&position) {
         return;
     }
-    settings.overlay_position = Some(position);
-    if core.set_settings(settings).is_ok() {
+    if core.modify_settings(|s| s.overlay_position = Some(position)).is_ok() {
         core.emit_state();
     }
 }
@@ -334,9 +351,7 @@ pub fn remember_position(app: &AppHandle) {
 pub fn reset_position(app: &AppHandle) {
     let core = core(app);
     core.overlay.lock().unwrap().dragged = false;
-    let mut settings = core.settings();
-    settings.overlay_position = None;
-    let _ = core.set_settings(settings);
+    let _ = core.modify_settings(|s| s.overlay_position = None);
     if let Some(win) = window(app) {
         if win.is_visible().unwrap_or(false) {
             place_on_active_monitor(app, &win);

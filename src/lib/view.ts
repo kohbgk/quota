@@ -210,9 +210,13 @@ export function cardFor(p: ProviderState, snapshot: AppSnapshot, now: number): C
       if (age > staleAfterMs(snapshot.settings)) {
         notice = { tone: "muted", text: `Last updated ${formatAgo(usage.fetchedAt, now)}` };
         dim = true;
-      } else if (usage.blocked) {
-        notice = { tone: "warn", text: "Included usage isn't available right now" };
       }
+  }
+  // Whatever else the card says, never let the percentages imply blocked usage is available.
+  if (usage.blocked) {
+    notice = notice
+      ? { tone: "warn", text: `${notice.text} · included usage unavailable` }
+      : { tone: "warn", text: "Included usage isn't available right now" };
   }
   return { ...base, badge, badgeTitle: title, rows, notice, dim };
 }

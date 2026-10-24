@@ -20,16 +20,21 @@ jobs:
 
       - name: Check version, tag and changelog
         shell: pwsh
+        # Ref names reach the script as environment variables, never as script text.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            if ("${{ github.ref }}" -ne "refs/heads/main") {
-              Write-Error "Run the release workflow on main, not ${{ github.ref_name }}"
+          if ($env:EVENT_NAME -eq "workflow_dispatch") {
+            if ($env:REF -ne "refs/heads/main") {
+              Write-Error "Run the release workflow on main, not $($env:REF_NAME)"
               exit 1
             }
             $tag = "v$version"
           } else {
-            $tag = "${{ github.ref_name }}"
+            $tag = $env:REF_NAME
             if ("v$version" -ne $tag) {
               Write-Error "Tag $tag doesn't match app version v$version"
               exit 1
@@ -81,6 +86,7 @@ jobs:
           $section = $lines[($start + 1)..($lines.Length - 1)]
           $next = 0
           while ($next -lt $section.Length -and -not $section[$next].StartsWith("## ")) { $next++ }
+          if ($next -eq 0) { Write-Error "CHANGELOG.md's '## [$($env:VERSION)]' section is empty"; exit 1 }
           $section[0..($next - 1)] | Set-Content release-notes.md
           # Creates the tag at this commit when it doesn't exist yet (workflow_dispatch).
           gh release create $env:TAG out/* --target "${{ github.sha }}" --title "Quota $($env:TAG)" --notes-file release-notes.md

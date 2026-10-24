@@ -22,19 +22,21 @@ pub fn get_state(core: CoreState) -> AppSnapshot {
 /// position and first-run flags have dedicated paths and are not changed here.
 #[tauri::command]
 pub fn update_settings(app: AppHandle, core: CoreState, settings: Settings) -> Result<AppSnapshot, String> {
-    let current = core.settings();
-    let next = Settings {
-        shortcut: current.shortcut.clone(),
-        claude_usage_endpoint: current.claude_usage_endpoint,
-        claude_status_line: current.claude_status_line,
-        onboarded: current.onboarded,
-        // Changed only by dragging the overlay or the reset command.
-        overlay_position: current.overlay_position,
+    // Fields with their own commands (or set by dragging the overlay) keep their saved values.
+    let merge = |saved: &Settings| Settings {
+        shortcut: saved.shortcut.clone(),
+        claude_usage_endpoint: saved.claude_usage_endpoint,
+        claude_status_line: saved.claude_status_line,
+        onboarded: saved.onboarded,
+        overlay_position: saved.overlay_position.clone(),
         codex_path: settings.codex_path.as_ref().map(|p| p.trim().to_string()).filter(|p| !p.is_empty()),
-        ..settings
+        ..settings.clone()
     };
-    next.validate()?;
-    core.set_settings(next.clone()).map_err(|_| "Couldn't save settings.".to_string())?;
+    let current = core.settings();
+    merge(&current).validate()?;
+    let next = core
+        .modify_settings(|s| *s = merge(s))
+        .map_err(|_| "Couldn't save settings.".to_string())?;
 
     if next.theme != current.theme {
         crate::overlay::apply_theme(&app, next.theme);
@@ -124,12 +126,11 @@ pub fn quit_app(app: AppHandle) {
 /// Grants or revokes permission to use Anthropic's undocumented usage endpoint.
 #[tauri::command]
 pub fn set_claude_usage_endpoint(core: CoreState, enabled: bool) -> Result<AppSnapshot, String> {
-    let mut settings = core.settings();
-    if settings.claude_usage_endpoint == enabled {
+    if core.settings().claude_usage_endpoint == enabled {
         return Ok(core.snapshot());
     }
-    settings.claude_usage_endpoint = enabled;
-    core.set_settings(settings).map_err(|_| "Couldn't save settings.".to_string())?;
+    core.modify_settings(|s| s.claude_usage_endpoint = enabled)
+        .map_err(|_| "Couldn't save settings.".to_string())?;
     core.reset_provider(ProviderId::Claude);
     core.inner().clone().refresh(ProviderId::Claude, Reason::Startup);
     core.emit_state();
@@ -147,9 +148,8 @@ pub fn set_claude_status_line(core: CoreState, enabled: bool) -> Result<AppSnaps
         statusline::uninstall(&dir)?;
         let _ = std::fs::remove_file(crate::paths::statusline_snapshot_file());
     }
-    let mut settings = core.settings();
-    settings.claude_status_line = enabled;
-    core.set_settings(settings).map_err(|_| "Couldn't save settings.".to_string())?;
+    core.modify_settings(|s| s.claude_status_line = enabled)
+        .map_err(|_| "Couldn't save settings.".to_string())?;
     core.reset_provider(ProviderId::Claude);
     core.inner().clone().refresh(ProviderId::Claude, Reason::Startup);
     core.emit_state();

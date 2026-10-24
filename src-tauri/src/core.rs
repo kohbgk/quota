@@ -216,10 +216,16 @@ impl Core {
         self.settings.lock().unwrap().clone()
     }
 
-    pub fn set_settings(&self, settings: Settings) -> std::io::Result<()> {
-        settings.save()?;
-        *self.settings.lock().unwrap() = settings;
-        Ok(())
+    /// Reads, changes and saves the settings as one step under the settings lock,
+    /// so changes made at the same time (a drag being saved while a preference
+    /// changes) can't overwrite each other or interleave their file writes.
+    pub fn modify_settings(&self, change: impl FnOnce(&mut Settings)) -> std::io::Result<Settings> {
+        let mut current = self.settings.lock().unwrap();
+        let mut next = current.clone();
+        change(&mut next);
+        next.save()?;
+        *current = next.clone();
+        Ok(next)
     }
 
     pub fn snapshot(&self) -> AppSnapshot {
@@ -385,11 +391,14 @@ impl Core {
         tauri::async_runtime::spawn(async move {
             let mut ticker = tokio::time::interval(Duration::from_secs(15));
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            // Providers whose window reset without a refresh, already shown as reset.
+            let mut announced = std::collections::HashSet::new();
             loop {
                 ticker.tick().await;
                 core.poll_status_line();
                 let interval = core.settings().refresh_interval.seconds();
                 let overlay_visible = crate::overlay::is_visible(&core.app);
+                let mut announce = false;
                 for id in ProviderId::ALL {
                     let reset = {
                         let providers = core.providers.lock().unwrap();
@@ -402,7 +411,16 @@ impl Core {
                         core.clone().refresh(id, Reason::WindowReset);
                     } else if interval.is_some() {
                         core.clone().refresh(id, Reason::Timer);
+                    } else if reset {
+                        // No refresh will run (refresh only when opened), but the
+                        // tray tooltip should still stop showing the old numbers.
+                        announce |= announced.insert(id);
+                        continue;
                     }
+                    announced.remove(&id);
+                }
+                if announce {
+                    core.emit_state();
                 }
             }
         });
