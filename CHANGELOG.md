@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.1.3]
+
+Reliability fixes from a full code review.
+
+**Downloads**
+
+- `Quota_0.1.3_x64-setup.exe`: installer for Windows 10/11 (per-user, no admin needed). Recommended.
+- `Quota_0.1.3_x64-portable.exe`: a single executable. Needs WebView2, which Windows 11 and most
+  Windows 10 PCs already have.
+- `SHA256SUMS.txt`: checksums for both.
+
+The builds aren't code-signed yet, so Windows SmartScreen may warn on first run: choose
+*More info* → *Run anyway*.
+
+**Fixes**
+
+- Saving the overlay's position at the same moment as another setting could lose one of the
+  changes. Settings are now always saved one change at a time.
+- The overlay's saved spot is only ever where you dragged it. Quota keeping a growing overlay
+  on screen, or Windows moving it during a display change, no longer overwrites it.
+- Pressing and holding the tray icon while the overlay is open no longer reopens it.
+- "Included usage unavailable" is still shown when the card is also showing old data.
+- The tray tooltip stops showing old numbers once a limit resets, even when refresh is set to
+  "Only when opened".
+
 ## [0.1.2]
 
 Settings opens reliably, the overlay can be moved anywhere, and clicking away always hides it.

@@ -117,6 +117,13 @@ that remembers its spot; click away must hide):
   `HOME`/`XDG_CONFIG_HOME`. Drive it with xdotool. Linux-only quirk: the global shortcut doesn't
   hide the overlay while it has keyboard focus under X11 (Windows uses RegisterHotKey).
 
+**v0.1.3** (full code review): all settings writes go through `Core::modify_settings` (read,
+change and save under one lock; temp files unique per write). `on_moved` ignores Quota's own
+placements/nudges (`placed_at`) and moves while hidden. The click-away watcher dates the hide
+from the button release (tray long press). Blocked usage is noted alongside other notices.
+The ticker updates the tray when a limit resets with refresh set to on-open. Release workflow
+reads ref names from env vars.
+
 Remaining:
 
 1. **Manual Windows testing by the user** with `docs/TESTING.md`. Fix whatever it turns up;
