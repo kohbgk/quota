@@ -8,7 +8,8 @@ export type WindowKey = "fiveHour" | "weekly";
 
 export type RowVM =
   | {
-      key: WindowKey;
+      /** "fiveHour" / "weekly", or "<group>:<window>" for model-group rows. */
+      key: string;
       label: string;
       kind: "value";
       remaining: number;
@@ -18,9 +19,9 @@ export type RowVM =
       reset: string;
       resetTitle: string;
     }
-  | { key: WindowKey; label: string; kind: "missing"; note: string }
-  | { key: WindowKey; label: string; kind: "reset"; note: string }
-  | { key: WindowKey; label: string; kind: "loading" };
+  | { key: string; label: string; kind: "missing"; note: string }
+  | { key: string; label: string; kind: "reset"; note: string }
+  | { key: string; label: string; kind: "loading" };
 
 export interface MessageVM {
   tone: "neutral" | "warn" | "error";
@@ -49,7 +50,7 @@ export interface OverlayVM {
   refreshing: boolean;
 }
 
-const NAMES: Record<ProviderId, string> = { codex: "Codex", claude: "Claude Code" };
+const NAMES: Record<ProviderId, string> = { codex: "Codex", claude: "Claude Code", antigravity: "Antigravity" };
 const LABELS: Record<WindowKey, string> = { fiveHour: "5-hour", weekly: "Weekly" };
 
 export function visibleWindows(settings: Settings): WindowKey[] {
@@ -61,7 +62,8 @@ export function visibleWindows(settings: Settings): WindowKey[] {
 
 export function visibleProviders(snapshot: AppSnapshot): ProviderState[] {
   const s = snapshot.settings;
-  return snapshot.providers.filter((p) => (p.id === "codex" ? s.showCodex : s.showClaude));
+  const shown: Record<ProviderId, boolean> = { codex: s.showCodex, claude: s.showClaude, antigravity: s.showAntigravity };
+  return snapshot.providers.filter((p) => shown[p.id]);
 }
 
 /** Data older than this is labelled as out of date even without an error. */
@@ -70,16 +72,21 @@ export function staleAfterMs(settings: Settings): number {
   return Math.max(15, interval * 3) * 60_000;
 }
 
-function rowFor(key: WindowKey, window: LimitWindow | null, id: ProviderId, now: number): RowVM {
-  const label = LABELS[key];
-  if (!window) {
+function rowFor(window: WindowKey, value: LimitWindow | null, id: ProviderId, now: number, group?: { index: number; name: string }): RowVM {
+  const key = group ? `${group.index}:${window}` : window;
+  const label = group ? `${group.name} · ${LABELS[window]}` : LABELS[window];
+  if (!value) {
     return {
       key,
       label,
       kind: "missing",
-      note: id === "codex" && key === "fiveHour" ? "Not reported for this plan" : "Not reported",
+      note: id === "codex" && window === "fiveHour" ? "Not reported for this plan" : "Not reported",
     };
   }
+  return valueRow(key, label, value, now);
+}
+
+function valueRow(key: string, label: string, window: LimitWindow, now: number): RowVM {
   // Past its reset time, a window's numbers are out of date however recently they were fetched
   // (Claude Code's status line stops reporting a window once it resets).
   if (window.resetsAt !== null && window.resetsAt * 1000 <= now) {
@@ -121,10 +128,11 @@ function messageFor(p: ProviderState): { message: MessageVM | null; consent: boo
         message: {
           tone: "neutral",
           title: `${name} isn't installed`,
-          body:
-            p.id === "codex"
-              ? "Install the Codex CLI and sign in with ChatGPT. Quota will find it automatically."
-              : "Install Claude Code and sign in with your Claude subscription.",
+          body: {
+            codex: "Install the Codex CLI and sign in with ChatGPT. Quota will find it automatically.",
+            claude: "Install Claude Code and sign in with your Claude subscription.",
+            antigravity: "Install Antigravity and sign in. Quota reads its quota while the app is open.",
+          }[p.id],
           action: p.id === "codex" ? { label: "Set path…", command: "settings", section: "providers" } : undefined,
         },
       };
@@ -146,11 +154,10 @@ function messageFor(p: ProviderState): { message: MessageVM | null; consent: boo
     case "waiting":
       return {
         consent: false,
-        message: {
-          tone: "neutral",
-          title: "Waiting for Claude Code",
-          body: "Usage appears after your next message in Claude Code.",
-        },
+        message:
+          p.id === "antigravity"
+            ? { tone: "neutral", title: "Antigravity isn't open", body: "Quota reads Antigravity's quota while the app is open." }
+            : { tone: "neutral", title: "Waiting for Claude Code", body: "Usage appears after your next message in Claude Code." },
       };
     case "rateLimited":
       return {
@@ -199,7 +206,9 @@ export function cardFor(p: ProviderState, snapshot: AppSnapshot, now: number): C
   }
 
   const { badge, title } = sourceBadge(usage);
-  const rows = windows.map((key) => rowFor(key, usage[key], p.id, now));
+  const rows = usage.groups?.length
+    ? usage.groups.flatMap((group, index) => windows.map((key) => rowFor(key, group[key], p.id, now, { index, name: group.name })))
+    : windows.map((key) => rowFor(key, usage[key], p.id, now));
   const age = now - usage.fetchedAt;
   let notice: CardVM["notice"] = null;
   let dim = false;
@@ -219,6 +228,11 @@ export function cardFor(p: ProviderState, snapshot: AppSnapshot, now: number): C
       notice = { tone: "warn", text: `Sign-in expired · data from ${formatAgo(usage.fetchedAt, now)}` };
       dim = true;
       break;
+    case "waiting":
+      // Antigravity is closed: its last numbers stay, labelled with their age.
+      notice = { tone: "muted", text: `${NAMES[p.id]} isn't open · data from ${formatAgo(usage.fetchedAt, now)}` };
+      dim = age > staleAfterMs(snapshot.settings);
+      break;
     default:
       if (age > staleAfterMs(snapshot.settings)) {
         notice = { tone: "muted", text: `Last updated ${formatAgo(usage.fetchedAt, now)}` };
@@ -235,7 +249,10 @@ export function cardFor(p: ProviderState, snapshot: AppSnapshot, now: number): C
 }
 
 export function buildOverlay(snapshot: AppSnapshot, now: number): OverlayVM {
-  const providers = visibleProviders(snapshot);
+  // Antigravity is optional: if it isn't installed, its card only appears when it's the only one.
+  let providers = visibleProviders(snapshot);
+  const absent = (p: ProviderState) => p.id === "antigravity" && p.status.kind === "notInstalled";
+  if (providers.some((p) => !absent(p))) providers = providers.filter((p) => !absent(p));
   const cards = providers.map((p) => cardFor(p, snapshot, now));
   const refreshing = providers.some((p) => p.refreshing);
   const fetchedAt = (pred: (p: ProviderState) => boolean) =>

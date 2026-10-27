@@ -46,6 +46,7 @@ impl Snapshot {
             source: UsageSource::ClaudeStatusLine,
             fetched_at: self.captured_at,
             blocked: false,
+            groups: Vec::new(),
         })
     }
 }

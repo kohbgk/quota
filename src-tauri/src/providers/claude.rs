@@ -16,27 +16,12 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use super::{find_on_path, statusline, ProviderError};
+use super::{find_on_path, statusline, ProviderError, Secret};
 use crate::model::{redact, LimitWindow, Usage, UsageSource};
 use crate::settings::Settings;
 
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const OAUTH_BETA: &str = "oauth-2025-04-20";
-
-/// Access token wrapper that never prints its value.
-pub struct Secret(String);
-
-impl Secret {
-    fn expose(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for Secret {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Secret(***)")
-    }
-}
 
 #[derive(Debug)]
 pub struct Credentials {
@@ -244,7 +229,7 @@ pub fn parse_usage_response(value: &Value, plan: Option<String>, now_ms: i64) ->
         w.window_minutes = Some(10_080);
         w
     });
-    Ok(Usage { five_hour, weekly, plan, source: UsageSource::ClaudeUsageEndpoint, fetched_at: now_ms, blocked: false })
+    Ok(Usage { five_hour, weekly, plan, source: UsageSource::ClaudeUsageEndpoint, fetched_at: now_ms, blocked: false, groups: Vec::new() })
 }
 
 #[cfg(test)]

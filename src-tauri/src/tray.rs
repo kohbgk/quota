@@ -6,7 +6,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::core::{AppSnapshot, Core, Reason};
-use crate::model::{remaining_label, ProviderStatus, ProviderState};
+use crate::model::{remaining_label, ProviderStatus, ProviderState, WindowKind};
 use crate::settings::Settings;
 
 const TRAY_ID: &str = "quota";
@@ -68,7 +68,8 @@ pub fn update_menu(app: &AppHandle) {
     }
 }
 
-/// One tooltip line: the first visible window the provider reports.
+/// One tooltip line: the first visible window the provider reports, or for
+/// providers with model groups, the visible window with the least left.
 fn summary(p: &ProviderState, settings: &Settings, now_ms: i64) -> Option<String> {
     let name = p.id.display_name();
     if !matches!(p.status, ProviderStatus::Ready) {
@@ -78,12 +79,17 @@ fn summary(p: &ProviderState, settings: &Settings, now_ms: i64) -> Option<String
     if usage.blocked {
         return Some(format!("{name}: included usage unavailable"));
     }
-    let (label, window) = [
-        (settings.show_five_hour, "5h", usage.five_hour.as_ref()),
-        (settings.show_weekly, "week", usage.weekly.as_ref()),
-    ]
-    .into_iter()
-    .find_map(|(shown, label, window)| if shown { window.map(|w| (label, w)) } else { None })?;
+    let shown = |kind: WindowKind| match kind {
+        WindowKind::FiveHour => settings.show_five_hour,
+        WindowKind::Weekly => settings.show_weekly,
+        WindowKind::Other => false,
+    };
+    let mut windows = usage.windows().into_iter().filter(|(_, kind, _)| shown(*kind));
+    let (label, _, window) = if usage.groups.is_empty() {
+        windows.next()?
+    } else {
+        windows.max_by(|a, b| a.2.used_percent.total_cmp(&b.2.used_percent))?
+    };
     if window.has_reset(now_ms) {
         return Some(format!("{name}: {label} limit reset"));
     }
@@ -100,6 +106,7 @@ pub fn update_tooltip(app: &AppHandle, snapshot: &AppSnapshot) {
         let visible = match p.id {
             crate::model::ProviderId::Codex => s.show_codex,
             crate::model::ProviderId::Claude => s.show_claude,
+            crate::model::ProviderId::Antigravity => s.show_antigravity,
         };
         if visible {
             if let Some(line) = summary(p, s, snapshot.now) {
@@ -116,7 +123,7 @@ mod tests {
     use crate::model::{LimitWindow, ProviderId, Usage, UsageSource};
 
     fn ready(five_hour: Option<LimitWindow>, weekly: Option<LimitWindow>) -> ProviderState {
-        let usage = Usage { five_hour, weekly, plan: None, source: UsageSource::CodexAppServer, fetched_at: 0, blocked: false };
+        let usage = Usage { five_hour, weekly, plan: None, source: UsageSource::CodexAppServer, fetched_at: 0, blocked: false, groups: Vec::new() };
         ProviderState { status: ProviderStatus::Ready, usage: Some(usage), ..ProviderState::new(ProviderId::Codex) }
     }
 
@@ -129,5 +136,22 @@ mod tests {
         assert_eq!(summary(&weekly_only, &settings, 0).as_deref(), Some("Codex: 90% left (week)"));
         let reset = ready(Some(LimitWindow::new(90.0, Some(1_000), Some(300))), None);
         assert_eq!(summary(&reset, &settings, 1_000_000).as_deref(), Some("Codex: 5h limit reset"));
+    }
+
+    #[test]
+    fn tooltip_shows_the_tightest_model_group_limit() {
+        use crate::model::QuotaGroup;
+        let group = |name: &str, five: f64, week: f64| QuotaGroup {
+            name: name.into(),
+            five_hour: Some(LimitWindow::new(five, None, Some(300))),
+            weekly: Some(LimitWindow::new(week, None, Some(10_080))),
+        };
+        let mut p = ready(None, None);
+        p.id = ProviderId::Antigravity;
+        p.usage.as_mut().unwrap().groups = vec![group("Gemini", 10.0, 20.0), group("Claude and GPT", 30.0, 36.0)];
+        let settings = Settings::default();
+        assert_eq!(summary(&p, &settings, 0).as_deref(), Some("Antigravity: 64% left (Claude and GPT week)"));
+        let five_only = Settings { show_weekly: false, ..Settings::default() };
+        assert_eq!(summary(&p, &five_only, 0).as_deref(), Some("Antigravity: 70% left (Claude and GPT 5h)"));
     }
 }

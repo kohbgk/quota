@@ -62,6 +62,7 @@ export const api = {
   resetOverlayPosition: () => call<void>("reset_overlay_position"),
   quit: () => call<void>("quit_app"),
   setClaudeUsageEndpoint: (enabled: boolean) => call<AppSnapshot>("set_claude_usage_endpoint", { enabled }),
+  setAntigravityApp: (enabled: boolean) => call<AppSnapshot>("set_antigravity_app", { enabled }),
   setClaudeStatusLine: (enabled: boolean) => call<AppSnapshot>("set_claude_status_line", { enabled }),
   providerDetails: () => call<ProviderDetails>("provider_details"),
 

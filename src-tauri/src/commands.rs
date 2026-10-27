@@ -27,6 +27,7 @@ pub fn update_settings(app: AppHandle, core: CoreState, settings: Settings) -> R
         shortcut: saved.shortcut.clone(),
         claude_usage_endpoint: saved.claude_usage_endpoint,
         claude_status_line: saved.claude_status_line,
+        antigravity_app: saved.antigravity_app,
         onboarded: saved.onboarded,
         overlay_position: saved.overlay_position.clone(),
         codex_path: settings.codex_path.as_ref().map(|p| p.trim().to_string()).filter(|p| !p.is_empty()),
@@ -50,6 +51,9 @@ pub fn update_settings(app: AppHandle, core: CoreState, settings: Settings) -> R
     }
     if next.show_claude && !current.show_claude {
         core.clone().refresh(ProviderId::Claude, Reason::Startup);
+    }
+    if next.show_antigravity && !current.show_antigravity {
+        core.clone().refresh(ProviderId::Antigravity, Reason::Startup);
     }
     core.emit_state();
     Ok(core.snapshot())
@@ -133,6 +137,20 @@ pub fn set_claude_usage_endpoint(core: CoreState, enabled: bool) -> Result<AppSn
         .map_err(|_| "Couldn't save settings.".to_string())?;
     core.reset_provider(ProviderId::Claude);
     core.inner().clone().refresh(ProviderId::Claude, Reason::Startup);
+    core.emit_state();
+    Ok(core.snapshot())
+}
+
+/// Grants or revokes permission to read quota from the running Antigravity app.
+#[tauri::command]
+pub fn set_antigravity_app(core: CoreState, enabled: bool) -> Result<AppSnapshot, String> {
+    if core.settings().antigravity_app == enabled {
+        return Ok(core.snapshot());
+    }
+    core.modify_settings(|s| s.antigravity_app = enabled)
+        .map_err(|_| "Couldn't save settings.".to_string())?;
+    core.reset_provider(ProviderId::Antigravity);
+    core.inner().clone().refresh(ProviderId::Antigravity, Reason::Startup);
     core.emit_state();
     Ok(core.snapshot())
 }

@@ -6,7 +6,7 @@ authors = ["kohbgk"]
 license = "MIT"
 repository = "https://github.com/kohbgk/quota"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.95"
 
 [lib]
 name = "quota_lib"
@@ -26,6 +26,8 @@ tokio = { version = "1", features = ["process", "io-util", "time", "macros", "rt
 ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier", "json"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 dirs = "6"
+# Finds the running Antigravity app's language server (process command lines).
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 log = "0.4"
 
 [target.'cfg(windows)'.dependencies]

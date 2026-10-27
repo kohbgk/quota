@@ -316,6 +316,7 @@ pub fn parse_rate_limits(result: &Value, now_ms: i64) -> Result<Usage, ProviderE
         fetched_at: now_ms,
         // Only an explicit `false` counts; null means the backend didn't say.
         blocked: get(result, "ordinaryUsageAllowed", "ordinary_usage_allowed").and_then(Value::as_bool) == Some(false),
+        groups: Vec::new(),
     };
 
     for (slot, fallback) in [("primary", WindowKind::FiveHour), ("secondary", WindowKind::Weekly)] {

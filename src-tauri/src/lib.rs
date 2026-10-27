@@ -43,6 +43,7 @@ pub fn run(start_hidden: bool) {
             commands::quit_app,
             commands::set_claude_usage_endpoint,
             commands::set_claude_status_line,
+            commands::set_antigravity_app,
             commands::provider_details,
         ])
         .setup(move |app| {

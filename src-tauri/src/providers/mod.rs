@@ -1,8 +1,24 @@
+pub mod antigravity;
 pub mod claude;
 pub mod codex;
 pub mod statusline;
 
 use crate::model::ProviderStatus;
+
+/// A token wrapper that never prints its value.
+pub struct Secret(pub(crate) String);
+
+impl Secret {
+    pub(crate) fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Secret(***)")
+    }
+}
 
 /// Why a provider couldn't produce usage. Mapped to a user-facing [`ProviderStatus`].
 #[derive(Debug, Clone, PartialEq)]

@@ -70,6 +70,7 @@ pub struct Settings {
     pub show_weekly: bool,
     pub show_codex: bool,
     pub show_claude: bool,
+    pub show_antigravity: bool,
     pub shortcut: String,
     pub hide_on_blur: bool,
     pub theme: Theme,
@@ -79,6 +80,9 @@ pub struct Settings {
     pub claude_usage_endpoint: bool,
     /// Whether Quota installed its Claude Code status line bridge.
     pub claude_status_line: bool,
+    /// Explicit opt-in to read Antigravity quota from the running Antigravity
+    /// app's undocumented local language server.
+    pub antigravity_app: bool,
     /// Optional explicit path to the `codex` executable.
     pub codex_path: Option<String>,
     /// Set after the first launch so first-run behavior only happens once.
@@ -94,12 +98,14 @@ impl Default for Settings {
             show_weekly: true,
             show_codex: true,
             show_claude: true,
+            show_antigravity: true,
             shortcut: DEFAULT_SHORTCUT.to_string(),
             hide_on_blur: true,
             theme: Theme::System,
             refresh_interval: RefreshInterval::FiveMinutes,
             claude_usage_endpoint: false,
             claude_status_line: false,
+            antigravity_app: false,
             codex_path: None,
             onboarded: false,
             overlay_position: None,
@@ -108,12 +114,16 @@ impl Default for Settings {
 }
 
 impl Settings {
+    fn shows_a_provider(&self) -> bool {
+        self.show_codex || self.show_claude || self.show_antigravity
+    }
+
     /// Rejects combinations that would leave the overlay empty.
     pub fn validate(&self) -> Result<(), String> {
         if !self.show_five_hour && !self.show_weekly {
             return Err("Keep at least one limit type visible.".into());
         }
-        if !self.show_codex && !self.show_claude {
+        if !self.shows_a_provider() {
             return Err("Keep at least one provider visible.".into());
         }
         if self.shortcut.trim().is_empty() {
@@ -128,9 +138,10 @@ impl Settings {
             self.show_five_hour = true;
             self.show_weekly = true;
         }
-        if !self.show_codex && !self.show_claude {
+        if !self.shows_a_provider() {
             self.show_codex = true;
             self.show_claude = true;
+            self.show_antigravity = true;
         }
         if self.shortcut.trim().is_empty() {
             self.shortcut = DEFAULT_SHORTCUT.to_string();
@@ -184,6 +195,7 @@ mod tests {
         assert_eq!(s.shortcut, "Ctrl+Shift+Space");
         assert!(s.hide_on_blur);
         assert!(!s.claude_usage_endpoint, "undocumented integration must be opt-in");
+        assert!(!s.antigravity_app, "undocumented integration must be opt-in");
         assert!(s.validate().is_ok());
     }
 
@@ -191,8 +203,10 @@ mod tests {
     fn validation_requires_a_limit_and_a_provider() {
         let s = Settings { show_five_hour: false, show_weekly: false, ..Default::default() };
         assert!(s.validate().is_err());
-        let s = Settings { show_codex: false, show_claude: false, ..Default::default() };
+        let s = Settings { show_codex: false, show_claude: false, show_antigravity: false, ..Default::default() };
         assert!(s.validate().is_err());
+        let s = Settings { show_codex: false, show_claude: false, ..Default::default() };
+        assert!(s.validate().is_ok(), "Antigravity alone is enough");
         let s = Settings { show_weekly: false, show_codex: false, ..Default::default() };
         assert!(s.validate().is_ok());
     }

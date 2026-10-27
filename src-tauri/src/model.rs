@@ -7,15 +7,17 @@ use serde::{Deserialize, Serialize};
 pub enum ProviderId {
     Codex,
     Claude,
+    Antigravity,
 }
 
 impl ProviderId {
-    pub const ALL: [ProviderId; 2] = [ProviderId::Codex, ProviderId::Claude];
+    pub const ALL: [ProviderId; 3] = [ProviderId::Codex, ProviderId::Claude, ProviderId::Antigravity];
 
     pub fn display_name(self) -> &'static str {
         match self {
             ProviderId::Codex => "Codex",
             ProviderId::Claude => "Claude Code",
+            ProviderId::Antigravity => "Antigravity",
         }
     }
 }
@@ -60,6 +62,17 @@ pub enum UsageSource {
     ClaudeUsageEndpoint,
     /// `rate_limits` from Claude Code's documented status line input.
     ClaudeStatusLine,
+    /// The running Antigravity app's local language server (undocumented, opt-in).
+    AntigravityApp,
+}
+
+/// Limits shared by a group of models (Antigravity: "Gemini", "Claude and GPT").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuotaGroup {
+    pub name: String,
+    pub five_hour: Option<LimitWindow>,
+    pub weekly: Option<LimitWindow>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -76,6 +89,28 @@ pub struct Usage {
     /// whatever the percentages show (Codex `ordinaryUsageAllowed: false`).
     #[serde(default)]
     pub blocked: bool,
+    /// Per-model-group limits, for providers that meter groups separately. When
+    /// present, `five_hour` and `weekly` are unused.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<QuotaGroup>,
+}
+
+impl Usage {
+    /// Every reported window with a short label, for summaries (tray, refresh policy).
+    pub fn windows(&self) -> Vec<(String, WindowKind, &LimitWindow)> {
+        let mut sets = vec![(None, &self.five_hour, &self.weekly)];
+        sets.extend(self.groups.iter().map(|g| (Some(g.name.as_str()), &g.five_hour, &g.weekly)));
+        let mut out = Vec::new();
+        for (prefix, five_hour, weekly) in sets {
+            for (kind, label, window) in [(WindowKind::FiveHour, "5h", five_hour), (WindowKind::Weekly, "week", weekly)] {
+                if let Some(window) = window {
+                    let label = prefix.map_or_else(|| label.to_string(), |p| format!("{p} {label}"));
+                    out.push((label, kind, window));
+                }
+            }
+        }
+        out
+    }
 }
 
 /// The provider's connection state, independent of whether cached data exists.

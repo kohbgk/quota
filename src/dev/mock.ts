@@ -24,16 +24,34 @@ const defaults: Settings = {
   showWeekly: true,
   showCodex: true,
   showClaude: true,
+  showAntigravity: true,
   shortcut: "Ctrl+Shift+Space",
   hideOnBlur: true,
   theme: "dark",
   refreshInterval: "fiveMinutes",
   claudeUsageEndpoint: true,
   claudeStatusLine: false,
+  antigravityApp: true,
   codexPath: null,
   onboarded: true,
   overlayPosition: null,
 };
+
+/** Antigravity-style usage: model groups, each with a 5-hour and a weekly window. */
+function groups(gemini: [number, number], claudeGpt: [number, number], ageMs = 30_000): Usage {
+  const w = (left: number, ms: number, minutes: number) => ({ usedPercent: 100 - left, resetsAt: inSec(ms), windowMinutes: minutes });
+  return {
+    fiveHour: null,
+    weekly: null,
+    plan: null,
+    source: "antigravityApp",
+    fetchedAt: now() - ageMs,
+    groups: [
+      { name: "Gemini", fiveHour: w(gemini[0], 3 * H + 12 * 60_000, 300), weekly: w(gemini[1], 4 * 24 * H, 10080) },
+      { name: "Claude and GPT", fiveHour: w(claudeGpt[0], 1 * H + 40 * 60_000, 300), weekly: w(claudeGpt[1], 5 * 24 * H, 10080) },
+    ],
+  };
+}
 
 function provider(id: ProviderState["id"], status: ProviderState["status"], u: Usage | null, refreshing = false): ProviderState {
   return { id, status, usage: u, refreshing, lastAttemptAt: now() - 20_000 };
@@ -43,6 +61,7 @@ function scenario(name: string): AppSnapshot {
   const settings = { ...defaults };
   let codex = provider("codex", { kind: "ready" }, usage(72, 45, "plus", "codexAppServer"));
   let claude = provider("claude", { kind: "ready" }, usage(38, 81, "pro", "claudeUsageEndpoint", 40_000));
+  let antigravity = provider("antigravity", { kind: "notInstalled" }, null);
   let shortcutError: string | null = null;
   let firstRun = false;
 
@@ -103,6 +122,21 @@ function scenario(name: string): AppSnapshot {
     case "blocked":
       codex.usage!.blocked = true;
       break;
+    case "antigravity":
+      antigravity = provider("antigravity", { kind: "ready" }, groups([86, 55], [24, 61]));
+      break;
+    case "antigravity-only":
+      settings.showCodex = false;
+      settings.showClaude = false;
+      antigravity = provider("antigravity", { kind: "ready" }, groups([86, 55], [24, 61]));
+      break;
+    case "antigravity-consent":
+      settings.antigravityApp = false;
+      antigravity = provider("antigravity", { kind: "needsConsent" }, null);
+      break;
+    case "antigravity-closed":
+      antigravity = provider("antigravity", { kind: "waiting" }, groups([86, 55], [24, 61], 50 * 60_000));
+      break;
     case "shortcut-error":
       shortcutError = "Ctrl+Shift+Space is already used by another app. Choose a different shortcut in Settings.";
       break;
@@ -118,7 +152,7 @@ function scenario(name: string): AppSnapshot {
       claude = provider("claude", { kind: "rateLimited", retryAt: now() + 4 * 60_000 }, usage(55, 70, "pro", "claudeUsageEndpoint", 9 * 60_000));
       break;
   }
-  return { settings, providers: [codex, claude], shortcutError, launchAtStartup: true, version: "0.1.0", now: now(), firstRun };
+  return { settings, providers: [codex, claude, antigravity], shortcutError, launchAtStartup: true, version: "0.1.0", now: now(), firstRun };
 }
 
 export function createMockBackend(): Backend {
@@ -178,6 +212,13 @@ export function createMockBackend(): Backend {
       state.settings.claudeUsageEndpoint = Boolean(enabled);
       const claude = state.providers[1]!;
       Object.assign(claude, enabled ? { status: { kind: "ready" }, usage: usage(38, 81, "pro", "claudeUsageEndpoint") } : { status: { kind: "needsConsent" }, usage: null });
+      emit();
+      return structuredClone(state);
+    },
+    set_antigravity_app: ({ enabled }) => {
+      state.settings.antigravityApp = Boolean(enabled);
+      const ag = state.providers[2]!;
+      Object.assign(ag, enabled ? { status: { kind: "ready" }, usage: groups([86, 55], [24, 61]) } : { status: { kind: "needsConsent" }, usage: null });
       emit();
       return structuredClone(state);
     },

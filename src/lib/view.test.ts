@@ -10,12 +10,14 @@ const settings: Settings = {
   showWeekly: true,
   showCodex: true,
   showClaude: true,
+  showAntigravity: true,
   shortcut: "Ctrl+Shift+Space",
   hideOnBlur: true,
   theme: "system",
   refreshInterval: "fiveMinutes",
   claudeUsageEndpoint: true,
   claudeStatusLine: false,
+  antigravityApp: true,
   codexPath: null,
   onboarded: true,
   overlayPosition: null,
@@ -168,6 +170,56 @@ describe("overlay view model", () => {
       NOW,
     );
     expect(vm.updated).toBe("Updated 2h ago");
+  });
+
+  describe("Antigravity", () => {
+    const w = (used: number, minutes: number) => ({ usedPercent: used, resetsAt: sec(3_600_000), windowMinutes: minutes });
+    const agUsage = (fetchedAgo = 10_000): Usage => ({
+      fiveHour: null,
+      weekly: null,
+      plan: null,
+      source: "antigravityApp",
+      fetchedAt: NOW - fetchedAgo,
+      groups: [
+        { name: "Gemini", fiveHour: w(14, 300), weekly: w(45, 10080) },
+        { name: "Claude and GPT", fiveHour: null, weekly: w(76, 10080) },
+      ],
+    });
+
+    it("shows a row per model group and window", () => {
+      const vm = buildOverlay(snap([...ready(), p("antigravity", { kind: "ready" }, agUsage())]), NOW);
+      const card = vm.cards[2]!;
+      expect(card.name).toBe("Antigravity");
+      expect(card.rows.map((r) => r.label)).toEqual(["Gemini · 5-hour", "Gemini · Weekly", "Claude and GPT · 5-hour", "Claude and GPT · Weekly"]);
+      expect(card.rows[0]).toMatchObject({ kind: "value", display: "86%" });
+      expect(card.rows[2]).toMatchObject({ kind: "missing", note: "Not reported" });
+      expect(new Set(card.rows.map((r) => r.key)).size).toBe(4);
+    });
+
+    it("follows the 5-hour / weekly settings", () => {
+      const vm = buildOverlay(snap([p("antigravity", { kind: "ready" }, agUsage())], { showFiveHour: false }), NOW);
+      expect(vm.cards[0]!.rows.map((r) => r.label)).toEqual(["Gemini · Weekly", "Claude and GPT · Weekly"]);
+    });
+
+    it("stays out of the way when it isn't installed", () => {
+      const absent = p("antigravity", { kind: "notInstalled" }, null);
+      expect(buildOverlay(snap([...ready(), absent]), NOW).cards.map((c) => c.id)).toEqual(["codex", "claude"]);
+      const alone = buildOverlay(snap([absent], { showCodex: false, showClaude: false }), NOW);
+      expect(alone.cards[0]!.message?.title).toBe("Antigravity isn't installed");
+    });
+
+    it("keeps the last numbers while the app is closed, saying so", () => {
+      const vm = buildOverlay(snap([p("antigravity", { kind: "waiting" }, agUsage(5 * 60_000))]), NOW);
+      expect(vm.cards[0]!.notice).toEqual({ tone: "muted", text: "Antigravity isn't open · data from 5m ago" });
+      expect(vm.cards[0]!.rows[0]).toMatchObject({ kind: "value" });
+      const never = buildOverlay(snap([p("antigravity", { kind: "waiting" }, null)]), NOW);
+      expect(never.cards[0]!.message?.title).toBe("Antigravity isn't open");
+    });
+
+    it("asks before reading", () => {
+      const vm = buildOverlay(snap([...ready(), p("antigravity", { kind: "needsConsent" }, null)]), NOW);
+      expect(vm.cards[2]!.consent).toBe(true);
+    });
   });
 
   it("tags status line data with its source", () => {

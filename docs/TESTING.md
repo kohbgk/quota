@@ -17,6 +17,10 @@ clippy and the build. These cover what only a real desktop can.
 - [ ] Status line bridge: turn on, send a Claude Code message, data appears with a "Status line" badge.
       With a custom `statusLine` already in `~\.claude\settings.json`, Quota refuses to replace it.
 - [ ] Only one provider installed: the other card explains why, and the overlay still works.
+- [ ] Antigravity installed and open: the card asks first; *Allow* shows Gemini and Claude/GPT 5-hour and
+      weekly rows matching Antigravity's own Settings → quota page. Close Antigravity: the card says it
+      isn't open and keeps the last numbers. Reopen it and refresh (R): fresh numbers.
+- [ ] Antigravity not installed: no Antigravity card (unless it's the only provider shown).
 
 **Overlay and shortcut**
 - [ ] Ctrl+Shift+Space toggles from any app; Esc and click-outside hide it; R refreshes; Ctrl+, opens Settings.

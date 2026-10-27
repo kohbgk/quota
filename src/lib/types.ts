@@ -1,6 +1,6 @@
 // Mirrors the Rust types serialized by the backend (src-tauri/src/model.rs, core.rs).
 
-export type ProviderId = "codex" | "claude";
+export type ProviderId = "codex" | "claude" | "antigravity";
 export type Theme = "system" | "light" | "dark";
 export type RefreshInterval = "twoMinutes" | "fiveMinutes" | "fifteenMinutes" | "onOpen";
 
@@ -11,7 +11,14 @@ export interface LimitWindow {
   windowMinutes: number | null;
 }
 
-export type UsageSource = "codexAppServer" | "claudeUsageEndpoint" | "claudeStatusLine";
+export type UsageSource = "codexAppServer" | "claudeUsageEndpoint" | "claudeStatusLine" | "antigravityApp";
+
+/** Limits shared by a group of models (Antigravity: "Gemini", "Claude and GPT"). */
+export interface QuotaGroup {
+  name: string;
+  fiveHour: LimitWindow | null;
+  weekly: LimitWindow | null;
+}
 
 export interface Usage {
   fiveHour: LimitWindow | null;
@@ -22,6 +29,8 @@ export interface Usage {
   fetchedAt: number;
   /** The provider says included usage isn't allowed right now, whatever the percentages show. */
   blocked?: boolean;
+  /** Per-model-group limits; when present, fiveHour and weekly are unused. */
+  groups?: QuotaGroup[];
 }
 
 export type ProviderStatus =
@@ -49,12 +58,14 @@ export interface Settings {
   showWeekly: boolean;
   showCodex: boolean;
   showClaude: boolean;
+  showAntigravity: boolean;
   shortcut: string;
   hideOnBlur: boolean;
   theme: Theme;
   refreshInterval: RefreshInterval;
   claudeUsageEndpoint: boolean;
   claudeStatusLine: boolean;
+  antigravityApp: boolean;
   codexPath: string | null;
   onboarded: boolean;
   /** Where the user dragged the overlay; null for the default spot. */

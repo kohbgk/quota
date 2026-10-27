@@ -2,8 +2,8 @@
 
 **Your AI usage. One shortcut away.**
 
-Quota is a small Windows tray app that shows how much of your **Codex** and **Claude Code**
-subscription usage is left. Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> from any app
+Quota is a small Windows tray app that shows how much of your **Codex**, **Claude Code** and
+**Antigravity** subscription usage is left. Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> from any app
 and a compact overlay shows the remaining percentage and reset time for your 5-hour and weekly
 limits. Press it again, hit <kbd>Esc</kbd>, or click elsewhere to dismiss it.
 
@@ -14,10 +14,10 @@ limits. Press it again, hit <kbd>Esc</kbd>, or click elsewhere to dismiss it.
 
 ## Why
 
-Codex and Claude Code both meter subscription use in rolling 5-hour and weekly windows, but
+Codex, Claude Code and Antigravity all meter subscription use in rolling 5-hour and weekly windows, but
 finding out where you stand means opening a terminal, running a command, or digging through a
 web page. Quota keeps that one number a keystroke away, without API keys and without changing how
-you sign in to either tool.
+you sign in to any of them.
 
 ## Features
 
@@ -51,6 +51,8 @@ Requirements: Windows 10 or 11 (x64). Install and sign in to the tools you want 
   (`codex login`).
 - **Claude Code**: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), signed in
   with a Claude subscription (Pro or Max).
+- **Antigravity**: the [Antigravity](https://antigravity.google) app, signed in with your Google
+  account. Optional: Quota hides Antigravity when it isn't installed.
 
 ## Keyboard
 
@@ -100,15 +102,32 @@ interface. Updates only while you use Claude Code.
 - If you already have a custom status line, Quota won't replace it.
 - Turning it off, or uninstalling Quota, restores the default.
 
+### Antigravity
+
+Google doesn't offer an official way to read Antigravity quotas. **This source is off until you
+allow it.** Quota asks the first time it finds Antigravity.
+
+**Read quota from the Antigravity app**
+
+While Antigravity is open, its language server answers on `127.0.0.1`. Quota asks it for the
+same quota summary Antigravity shows in its own settings: the 5-hour and weekly limits for each
+model group ("Gemini", "Claude and GPT").
+
+- Uses Antigravity's undocumented local interface, so it may stop working after an Antigravity
+  update.
+- Everything stays on your PC. Quota reads the per-session key the app passes to its own
+  language server, sends it only to that server on `127.0.0.1`, and never stores or logs it.
+- When Antigravity is closed, Quota shows the last numbers it read, labelled with their age.
+
 ## Settings
 
 Open Settings from the overlay's sliders button, the tray menu, or <kbd>Ctrl</kbd>+<kbd>,</kbd>.
 
 | Section | Options |
 | --- | --- |
-| Overlay | Show 5-hour limits, show weekly limits (at least one stays on); show Codex, show Claude Code (at least one stays on) |
+| Overlay | Show 5-hour limits, show weekly limits (at least one stays on); show Codex, Claude Code, Antigravity (at least one stays on) |
 | Shortcut | Record a new shortcut, or reset to the default |
-| Providers | Custom path to `codex.exe`; choose the Claude Code source(s) |
+| Providers | Custom path to `codex.exe`; choose the Claude Code source(s); allow reading Antigravity's quota |
 | General | Launch at startup; hide when clicking outside; reset the overlay's position; theme (System, Light, Dark); refresh every 2, 5, or 15 minutes, or only when opened |
 
 Quota also refreshes when you open the overlay if its data is more than a minute or two old, and
@@ -124,6 +143,9 @@ Settings and the last retrieved usage (no credentials) are kept in
   while Claude Code is in use.
 - **The status line bridge won't replace a custom status line.** If you already have one, use
   the sign-in source instead.
+- **Antigravity relies on an undocumented local interface,** and only updates while the
+  Antigravity app is open. A bucket Antigravity reports without a clear 5-hour or weekly window
+  is left out rather than guessed.
 - **Codex may not report every window.** Some plans report only a weekly limit; Quota shows the
   other as "Not reported".
 - **The portable exe needs WebView2.** It's built into Windows 11 and most Windows 10 installs;

@@ -40,6 +40,7 @@ app.innerHTML = `
         <div class="group">
           ${item("Codex", '<span id="codexSummary"></span>', sw("showCodex", "Show Codex"))}
           ${item("Claude Code", '<span id="claudeSummary"></span>', sw("showClaude", "Show Claude Code"))}
+          ${item("Antigravity", '<span id="antigravitySummary"></span>', sw("showAntigravity", "Show Antigravity"))}
         </div>
       </section>
 
@@ -105,6 +106,22 @@ app.innerHTML = `
               </div>
               ${sw("claudeBridge", "Status line bridge")}
             </div>
+          </div>
+        </div>
+        <div class="group" id="antigravity">
+          <div class="item stack">
+            <div class="provider-head">
+              <div class="item-text">
+                <div class="item-title">Antigravity <span class="status" id="antigravityStatus"></span></div>
+                <div class="item-desc">Reads the 5-hour and weekly limits for each model group from the Antigravity app while it's open.</div>
+              </div>
+              ${sw("antigravityApp", "Read quota from the Antigravity app")}
+            </div>
+            <ul class="points">
+              <li>${icons.info}<span>Google doesn't offer an official way to read Antigravity quotas, so this uses the app's undocumented local interface and may stop working after an Antigravity update.</span></li>
+              <li>${icons.lock}<span>Everything stays on this PC: Quota asks the running app over <code>127.0.0.1</code> with the per-session key the app passes to its own language server, and never stores or logs it.</span></li>
+              <li>${icons.refresh}<span>When Antigravity is closed, Quota shows the last numbers it read.</span></li>
+            </ul>
           </div>
         </div>
       </section>
@@ -180,7 +197,7 @@ function statusOf(p: ProviderState | undefined): { text: string; tone: "ok" | "w
     case "expired":
       return { text: "Sign-in expired", tone: "warn" };
     case "waiting":
-      return { text: "Waiting for Claude Code", tone: "" };
+      return { text: p.id === "antigravity" ? "App not open" : "Waiting for Claude Code", tone: "" };
     case "unsupported":
       return { text: "Unavailable", tone: "warn" };
     case "rateLimited":
@@ -209,8 +226,11 @@ function render() {
 
   setSwitch("showFiveHour", s.showFiveHour, s.showFiveHour && !s.showWeekly, s.showFiveHour && !s.showWeekly ? "At least one limit type stays visible" : "");
   setSwitch("showWeekly", s.showWeekly, s.showWeekly && !s.showFiveHour, s.showWeekly && !s.showFiveHour ? "At least one limit type stays visible" : "");
-  setSwitch("showCodex", s.showCodex, s.showCodex && !s.showClaude, s.showCodex && !s.showClaude ? "At least one provider stays visible" : "");
-  setSwitch("showClaude", s.showClaude, s.showClaude && !s.showCodex, s.showClaude && !s.showCodex ? "At least one provider stays visible" : "");
+  const shownProviders = [s.showCodex, s.showClaude, s.showAntigravity].filter(Boolean).length;
+  const lastProvider = (on: boolean) => on && shownProviders === 1;
+  for (const [id, on] of [["showCodex", s.showCodex], ["showClaude", s.showClaude], ["showAntigravity", s.showAntigravity]] as const) {
+    setSwitch(id, on, lastProvider(on), lastProvider(on) ? "At least one provider stays visible" : "");
+  }
   setSwitch("hideOnBlur", s.hideOnBlur);
   setSwitch("launchAtStartup", snapshot.launchAtStartup);
 
@@ -218,6 +238,10 @@ function render() {
   const claude = snapshot.providers.find((p) => p.id === "claude");
   $("codexSummary").textContent = statusOf(codex).text || "Subscription usage from your ChatGPT plan";
   $("claudeSummary").textContent = statusOf(claude).text || "Subscription usage from your Claude plan";
+  const antigravity = snapshot.providers.find((p) => p.id === "antigravity");
+  $("antigravitySummary").textContent = statusOf(antigravity).text || "Model quotas from the Antigravity app";
+  setStatus("antigravityStatus", antigravity);
+  setSwitch("antigravityApp", s.antigravityApp);
   setStatus("codexStatus", codex);
   setStatus("claudeStatus", claude);
 
@@ -344,6 +368,12 @@ const toggles: Record<string, (on: boolean) => Promise<unknown>> = {
     withBusy("launchAtStartup", async () => {
       const actual = await api.setLaunchAtStartup(on);
       if (snapshot) snapshot = { ...snapshot, launchAtStartup: actual };
+    }),
+  showAntigravity: (on) => saveSettings({ showAntigravity: on }),
+  antigravityApp: (on) =>
+    withBusy("antigravityApp", async () => {
+      adopt(await api.setAntigravityApp(on));
+      toast(on ? "Reading Antigravity quota from the app" : "Stopped reading Antigravity quota");
     }),
   claudeEndpoint: (on) =>
     withBusy("claudeEndpoint", async () => {

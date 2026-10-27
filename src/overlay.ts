@@ -93,22 +93,38 @@ function messageHtml(card: CardVM, message: MessageVM): string {
     </div>`;
 }
 
-function consentHtml(): string {
+const CONSENT: Partial<Record<CardVM["id"], { title: string; body: string; fine: string; more: string }>> = {
+  claude: {
+    title: "Connect your Claude subscription",
+    body: "Quota can read your Claude Code usage limits using the sign-in Claude Code already saved on this PC.",
+    fine: "Uses an undocumented Anthropic endpoint that may change. Your sign-in is sent only to Anthropic and is never stored by Quota.",
+    more: "Other options",
+  },
+  antigravity: {
+    title: "Connect Antigravity",
+    body: "Quota can read your Antigravity quota from the Antigravity app while it's open on this PC.",
+    fine: "Uses Antigravity's undocumented local interface, which may change. Nothing leaves your PC; Quota only asks the Antigravity app.",
+    more: "Learn more",
+  },
+};
+
+function consentHtml(card: CardVM): string {
+  const text = CONSENT[card.id]!;
   return `
     <div class="consent">
-      <p class="msg-title">Connect your Claude subscription</p>
-      <p class="msg-body">Quota can read your Claude Code usage limits using the sign-in Claude Code already saved on this PC.</p>
-      <p class="fine">${icons.lock}<span>Uses an undocumented Anthropic endpoint that may change. Your sign-in is sent only to Anthropic and is never stored by Quota.</span></p>
+      <p class="msg-title">${text.title}</p>
+      <p class="msg-body">${text.body}</p>
+      <p class="fine">${icons.lock}<span>${text.fine}</span></p>
       <div class="actions">
-        <button class="btn primary" data-cmd="consent">Allow</button>
-        <button class="btn ghost" data-cmd="settings" data-section="claude">Other options</button>
+        <button class="btn primary" data-cmd="consent" data-provider="${card.id}">Allow</button>
+        <button class="btn ghost" data-cmd="settings" data-section="${card.id}">${text.more}</button>
       </div>
     </div>`;
 }
 
 function buildCard(el: HTMLElement, card: CardVM) {
   let body = "";
-  if (card.consent) body = consentHtml();
+  if (card.consent) body = consentHtml(card);
   else if (card.message) body = messageHtml(card, card.message);
   else
     body = `<div class="rows">${card.rows
@@ -262,7 +278,7 @@ app.addEventListener("click", (e) => {
       void run(() => api.refresh(provider as never));
       break;
     case "consent":
-      void run(() => api.setClaudeUsageEndpoint(true));
+      void run(() => (provider === "antigravity" ? api.setAntigravityApp(true) : api.setClaudeUsageEndpoint(true)));
       break;
     case "settings":
       void run(() => api.openSettings(section || undefined));

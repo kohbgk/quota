@@ -13,7 +13,7 @@ use tauri::{AppHandle, Emitter};
 
 use crate::model::{ProviderId, ProviderState, ProviderStatus, Usage};
 use crate::paths::{self, now_ms};
-use crate::providers::{claude, codex, statusline, ProviderError};
+use crate::providers::{antigravity, claude, codex, statusline, ProviderError};
 use crate::settings::Settings;
 
 pub const STATE_EVENT: &str = "quota://state";
@@ -100,14 +100,15 @@ fn min_gap_secs(id: ProviderId, local_only: bool, reason: Reason) -> i64 {
     }
     match (id, reason) {
         (_, Reason::Startup) => 0,
-        (ProviderId::Codex, Reason::Manual) => 5,
+        // Codex and Antigravity are asked through their own local processes.
+        (ProviderId::Codex | ProviderId::Antigravity, Reason::Manual) => 5,
         (ProviderId::Claude, Reason::Manual) => 30,
-        (ProviderId::Codex, Reason::Open) => 20,
+        (ProviderId::Codex | ProviderId::Antigravity, Reason::Open) => 20,
         (ProviderId::Claude, Reason::Open) => 60,
         (_, Reason::WindowReset) => 60,
         // Timer reasons are gated by the interval itself; Claude keeps a floor
         // because Anthropic rate limits this endpoint aggressively.
-        (ProviderId::Codex, Reason::Timer) => 60,
+        (ProviderId::Codex | ProviderId::Antigravity, Reason::Timer) => 60,
         (ProviderId::Claude, Reason::Timer) => 120,
     }
 }
@@ -115,7 +116,7 @@ fn min_gap_secs(id: ProviderId, local_only: bool, reason: Reason) -> i64 {
 /// How old data may be before opening the overlay triggers a refresh.
 fn open_max_age_secs(id: ProviderId) -> i64 {
     match id {
-        ProviderId::Codex => 60,
+        ProviderId::Codex | ProviderId::Antigravity => 60,
         ProviderId::Claude => 120,
     }
 }
@@ -161,7 +162,7 @@ pub fn should_refresh(
 /// Delay before the next automatic attempt after a failure.
 pub fn backoff_ms(id: ProviderId, err: &ProviderError, failures: u32) -> i64 {
     let (base, cap) = match id {
-        ProviderId::Codex => (30_000i64, 15 * 60_000i64),
+        ProviderId::Codex | ProviderId::Antigravity => (30_000i64, 15 * 60_000i64),
         ProviderId::Claude => (120_000, 30 * 60_000),
     };
     let exponential = base.saturating_mul(1i64 << failures.saturating_sub(1).min(10)).min(cap);
@@ -236,7 +237,7 @@ const FALLBACK_FRESH_MS: i64 = 15 * 60_000;
 
 /// True when a window's reset time has passed since the data was fetched.
 pub fn has_reset_since_fetch(usage: &Usage, now: i64) -> bool {
-    [&usage.five_hour, &usage.weekly].into_iter().flatten().any(|w| {
+    usage.windows().into_iter().any(|(_, _, w)| {
         w.resets_at.is_some_and(|r| {
             let reset_ms = r * 1000;
             reset_ms + 30_000 <= now && usage.fetched_at < reset_ms
@@ -260,6 +261,11 @@ impl Core {
                 _ => true,
             };
             if !allowed {
+                t.state.usage = None;
+            }
+        }
+        if !settings.antigravity_app {
+            if let Some(t) = providers.get_mut(&ProviderId::Antigravity) {
                 t.state.usage = None;
             }
         }
@@ -315,6 +321,7 @@ impl Core {
         match id {
             ProviderId::Codex => s.show_codex,
             ProviderId::Claude => s.show_claude,
+            ProviderId::Antigravity => s.show_antigravity,
         }
     }
 
@@ -363,6 +370,7 @@ impl Core {
             let result = match id {
                 ProviderId::Codex => codex::fetch(settings.codex_path.clone()).await,
                 ProviderId::Claude => claude::fetch(&settings).await,
+                ProviderId::Antigravity => antigravity::fetch(settings.antigravity_app).await,
             };
             // When Claude's usage endpoint fails, Claude Code's own status line
             // report (if enabled and newer than what's shown) can stand in.
@@ -507,6 +515,7 @@ mod tests {
             source: UsageSource::CodexAppServer,
             fetched_at,
             blocked: false,
+            groups: Vec::new(),
         }
     }
 
