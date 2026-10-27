@@ -27,6 +27,7 @@ src-tauri/src/
   providers/codex.rs      spawns `codex app-server`, JSON-RPC account/rateLimits/read — unit tested with a fake server
   providers/claude.rs     opt-in Anthropic OAuth usage endpoint using ~/.claude/.credentials.json — unit tested
   providers/statusline.rs opt-in Claude Code status line bridge (documented rate_limits field) — unit tested
+  providers/antigravity.rs opt-in Antigravity reader (running app's local language server) — unit + live tested
 src/
   overlay.ts, settings.ts   the two pages (keyed DOM updates, no framework)
   lib/view.ts               pure view model: what the overlay shows in every state — unit tested
@@ -61,8 +62,8 @@ src/
 ## Status
 
 Done and verified on Linux:
-- Rust: builds with zero warnings, clippy clean, **51 unit tests pass** (+2 opt-in live tests, `--ignored`).
-- Frontend: `tsc` clean, **30 vitest tests pass**, production build OK.
+- Rust: builds with zero warnings, clippy clean, **58 unit tests pass** (+2 opt-in live tests, `--ignored`).
+- Frontend: `tsc` clean, **35 vitest tests pass**, production build OK.
 - UI reviewed via headless-Chromium screenshots of ~15 overlay states + settings (dark/light).
 - Windows CI green (typecheck, vitest, clippy -D warnings, cargo test, tauri build): https://github.com/kohbgk/quota/actions
 
@@ -133,9 +134,21 @@ capped to the work area (page scrolls); switch aria-labels. Declined or deferred
 given to the user: auto-update (needs a signing secret only the owner can add), per-provider
 freshness labels, cooldown hints, diagnostics, a file picker.
 
+**v0.2.0 — Antigravity** (owner asked for it; CLAUDE.md scope updated). Source: the running
+Antigravity app's language server, `POST https://127.0.0.1:<port>/exa.language_server_pb.
+LanguageServerService/RetrieveUserQuotaSummary` with `X-Codeium-Csrf-Token` (from the process's
+`--csrf_token`) and `Connect-Protocol-Version: 1`, body `{}`. Ports: netstat (Windows) / lsof;
+fallback `--extension_server_port` over HTTP. Response: `response.groups[].buckets[]` with
+`bucketId`/`displayName` ("Five Hour Limit", "Weekly Limit"), `remaining.remainingFraction` (or
+direct / oneof), `resetTime`. Not verified against real Antigravity (its download site is blocked
+from the sandbox); verified with a stand-in server (`cargo test -- --ignored live_` while one
+runs). Alternative not taken: `agy -p /usage --output-format json` (agy ≥ 1.1.11). It's heavier
+and may open a sign-in browser on Windows, but it's the fallback if the local server changes.
+
 Remaining:
 
-1. **Manual Windows testing by the user** with `docs/TESTING.md`. Fix whatever it turns up;
+1. **Manual Windows testing by the user** with `docs/TESTING.md`, especially the Antigravity
+   items (first check against real Antigravity). Fix whatever it turns up;
    for a fix release bump the version in all three files, add a CHANGELOG section, and
    run the Release workflow on main.
 2. Code signing would remove the SmartScreen warning (needs a certificate from the user).

@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.0]
+
+Antigravity support.
+
+**Downloads**
+
+- `Quota_0.2.0_x64-setup.exe`: installer for Windows 10/11 (per-user, no admin needed). Recommended.
+- `Quota_0.2.0_x64-portable.exe`: a single executable. Needs WebView2, which Windows 11 and most
+  Windows 10 PCs already have.
+- `SHA256SUMS.txt`: checksums for both.
+
+The builds aren't code-signed yet, so Windows SmartScreen may warn on first run: choose
+*More info* → *Run anyway*.
+
+**New**
+
+- **Antigravity**: Quota shows the 5-hour and weekly limits for each Antigravity model group
+  (Gemini; Claude and GPT), read from the Antigravity app while it's open.
+  - Off until you allow it: Google doesn't offer an official way to read these quotas, so Quota
+    uses the app's undocumented local interface. Nothing leaves your PC.
+  - When Antigravity is closed, its card keeps the last numbers and says how old they are.
+  - If Antigravity isn't installed, its card stays out of the way.
+- Settings: show or hide Antigravity in the overlay, and allow or stop reading its quota.
+
 ## [0.1.4]
 
 More reliability fixes, after checking a list of suggested changes against the code.
