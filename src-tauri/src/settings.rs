@@ -95,7 +95,14 @@ pub struct Settings {
     pub notified_update: Option<String>,
     /// The version whose "update available" bar the user closed.
     pub dismissed_update: Option<String>,
+    /// Format of this settings file, for one-time adjustments on upgrade.
+    /// Files written before versions existed read as 0.
+    #[serde(default)]
+    pub settings_version: u32,
 }
+
+/// Bumped when an upgrade needs to adjust saved settings (see `migrate`).
+pub const SETTINGS_VERSION: u32 = 1;
 
 impl Default for Settings {
     fn default() -> Self {
@@ -104,7 +111,8 @@ impl Default for Settings {
             show_weekly: true,
             show_codex: true,
             show_claude: true,
-            show_antigravity: true,
+            // Antigravity is optional: hidden until the user turns it on.
+            show_antigravity: false,
             shortcut: DEFAULT_SHORTCUT.to_string(),
             hide_on_blur: true,
             theme: Theme::System,
@@ -118,6 +126,7 @@ impl Default for Settings {
             check_for_updates: true,
             notified_update: None,
             dismissed_update: None,
+            settings_version: SETTINGS_VERSION,
         }
     }
 }
@@ -139,6 +148,19 @@ impl Settings {
             return Err("The shortcut can't be empty.".into());
         }
         Ok(())
+    }
+
+    /// One-time adjustments for settings saved by older versions.
+    fn migrate(mut self) -> Self {
+        if self.settings_version < 1 {
+            // 0.2.0–0.2.1 showed Antigravity by default. Hide it unless the user
+            // connected it (or it's the only provider they chose to show).
+            if !self.antigravity_app && (self.show_codex || self.show_claude) {
+                self.show_antigravity = false;
+            }
+        }
+        self.settings_version = SETTINGS_VERSION;
+        self
     }
 
     /// Repairs invalid values loaded from disk instead of failing to start.
@@ -171,7 +193,7 @@ impl Settings {
     pub fn load_from(path: &Path) -> Self {
         match std::fs::read(path) {
             Ok(bytes) => match serde_json::from_slice::<Settings>(&bytes) {
-                Ok(settings) => settings.sanitize(),
+                Ok(settings) => settings.migrate().sanitize(),
                 Err(err) => {
                     log::warn!("settings file is invalid, using defaults: {err}");
                     // Keep the broken file for inspection instead of silently losing it.
@@ -214,7 +236,7 @@ mod tests {
         assert!(s.validate().is_err());
         let s = Settings { show_codex: false, show_claude: false, show_antigravity: false, ..Default::default() };
         assert!(s.validate().is_err());
-        let s = Settings { show_codex: false, show_claude: false, ..Default::default() };
+        let s = Settings { show_codex: false, show_claude: false, show_antigravity: true, ..Default::default() };
         assert!(s.validate().is_ok(), "Antigravity alone is enough");
         let s = Settings { show_weekly: false, show_codex: false, ..Default::default() };
         assert!(s.validate().is_ok());
@@ -239,6 +261,26 @@ mod tests {
         assert!(!loaded.show_weekly);
         assert!(loaded.show_five_hour);
         assert_eq!(loaded.shortcut, DEFAULT_SHORTCUT);
+    }
+
+    #[test]
+    fn antigravity_starts_hidden_and_older_files_hide_it_once() {
+        assert!(!Settings::default().show_antigravity && !Settings::default().antigravity_app);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let load = |json: &str| {
+            std::fs::write(&path, json).unwrap();
+            Settings::load_from(&path)
+        };
+        // Saved by 0.2.x with Antigravity shown but never connected: hidden.
+        let old = load(r#"{"showCodex": true, "showClaude": true, "showAntigravity": true, "antigravityApp": false}"#);
+        assert!(!old.show_antigravity);
+        assert_eq!(old.settings_version, SETTINGS_VERSION);
+        // Connected, or the only provider shown: kept.
+        assert!(load(r#"{"showAntigravity": true, "antigravityApp": true}"#).show_antigravity);
+        assert!(load(r#"{"showCodex": false, "showClaude": false, "showAntigravity": true}"#).show_antigravity);
+        // Once migrated, the user's own choice to show it stays.
+        assert!(load(&format!(r#"{{"showAntigravity": true, "settingsVersion": {SETTINGS_VERSION}}}"#)).show_antigravity);
     }
 
     #[test]

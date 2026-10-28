@@ -21,6 +21,7 @@ const settings: Settings = {
   checkForUpdates: true,
   notifiedUpdate: null,
   dismissedUpdate: null,
+  settingsVersion: 1,
   codexPath: null,
   onboarded: true,
   overlayPosition: null,

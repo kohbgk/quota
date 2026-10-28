@@ -32,6 +32,7 @@ pub fn update_settings(app: AppHandle, core: CoreState, settings: Settings) -> R
         overlay_position: saved.overlay_position.clone(),
         notified_update: saved.notified_update.clone(),
         dismissed_update: saved.dismissed_update.clone(),
+        settings_version: saved.settings_version,
         codex_path: settings.codex_path.as_ref().map(|p| p.trim().to_string()).filter(|p| !p.is_empty()),
         ..settings.clone()
     };
@@ -173,8 +174,12 @@ pub fn set_antigravity_app(core: CoreState, enabled: bool) -> Result<AppSnapshot
     if core.settings().antigravity_app == enabled {
         return Ok(core.snapshot());
     }
-    core.modify_settings(|s| s.antigravity_app = enabled)
-        .map_err(|_| "Couldn't save settings.".to_string())?;
+    core.modify_settings(|s| {
+        s.antigravity_app = enabled;
+        // Connecting Antigravity also shows its card.
+        s.show_antigravity |= enabled;
+    })
+    .map_err(|_| "Couldn't save settings.".to_string())?;
     core.reset_provider(ProviderId::Antigravity);
     core.inner().clone().refresh(ProviderId::Antigravity, Reason::Startup);
     core.emit_state();

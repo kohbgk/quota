@@ -54,8 +54,8 @@ Requirements: Windows 10 or 11 (x64). Install and sign in to the tools you want 
   (`codex login`).
 - **Claude Code**: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), signed in
   with a Claude subscription (Pro or Max).
-- **Antigravity**: the [Antigravity](https://antigravity.google) app, signed in with your Google
-  account. Optional: Quota hides Antigravity when it isn't installed.
+- **Antigravity** (optional, off by default): the [Antigravity](https://antigravity.google) app,
+  signed in with your Google account. Turn it on in Settings → Overlay → Antigravity.
 
 ## Keyboard
 
@@ -107,8 +107,8 @@ interface. Updates only while you use Claude Code.
 
 ### Antigravity
 
-Google doesn't offer an official way to read Antigravity quotas. **This source is off until you
-allow it.** Quota asks the first time it finds Antigravity.
+Google doesn't offer an official way to read Antigravity quotas. **Antigravity is hidden and off
+until you turn it on** (Settings → Overlay → Antigravity); Quota then asks before reading anything.
 
 **Read quota from the Antigravity app**
 

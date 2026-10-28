@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.2]
+
+Antigravity is now off by default.
+
+**Downloads**
+
+- `Quota_0.2.2_x64-setup.exe`: installer for Windows 10/11 (per-user, no admin needed). Recommended.
+- `Quota_0.2.2_x64-portable.exe`: a single executable. Needs WebView2, which Windows 11 and most
+  Windows 10 PCs already have.
+- `SHA256SUMS.txt`: checksums for both.
+
+The builds aren't code-signed yet, so Windows SmartScreen may warn on first run: choose
+*More info* → *Run anyway*.
+
+**Changes**
+
+- The overlay shows Codex and Claude Code by default. Antigravity is hidden and off until you
+  turn it on in Settings → Overlay → Antigravity; Quota then asks before reading its quota.
+- If you upgraded from 0.2.0 or 0.2.1 without connecting Antigravity, it's hidden now. If you did
+  connect it, nothing changes.
+
 ## [0.2.1]
 
 Quota now tells you when there's a new version.

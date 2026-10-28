@@ -75,6 +75,7 @@ export interface Settings {
   notifiedUpdate: string | null;
   /** The version whose "update available" bar was closed. */
   dismissedUpdate: string | null;
+  settingsVersion: number;
 }
 
 export interface AppSnapshot {

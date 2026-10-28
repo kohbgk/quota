@@ -24,7 +24,7 @@ const defaults: Settings = {
   showWeekly: true,
   showCodex: true,
   showClaude: true,
-  showAntigravity: true,
+  showAntigravity: false,
   shortcut: "Ctrl+Shift+Space",
   hideOnBlur: true,
   theme: "dark",
@@ -38,6 +38,7 @@ const defaults: Settings = {
   checkForUpdates: true,
   notifiedUpdate: null,
   dismissedUpdate: null,
+  settingsVersion: 1,
 };
 
 /** Antigravity-style usage: model groups, each with a 5-hour and a weekly window. */
@@ -130,18 +131,22 @@ function scenario(name: string): AppSnapshot {
       update = { ...update, available: { version: "0.3.0", url: "https://github.com/kohbgk/quota/releases/tag/v0.3.0" } };
       break;
     case "antigravity":
+      settings.showAntigravity = true;
       antigravity = provider("antigravity", { kind: "ready" }, groups([86, 55], [24, 61]));
       break;
     case "antigravity-only":
+      settings.showAntigravity = true;
       settings.showCodex = false;
       settings.showClaude = false;
       antigravity = provider("antigravity", { kind: "ready" }, groups([86, 55], [24, 61]));
       break;
     case "antigravity-consent":
+      settings.showAntigravity = true;
       settings.antigravityApp = false;
       antigravity = provider("antigravity", { kind: "needsConsent" }, null);
       break;
     case "antigravity-closed":
+      settings.showAntigravity = true;
       antigravity = provider("antigravity", { kind: "waiting" }, groups([86, 55], [24, 61], 50 * 60_000));
       break;
     case "shortcut-error":
@@ -237,6 +242,7 @@ export function createMockBackend(): Backend {
     },
     set_antigravity_app: ({ enabled }) => {
       state.settings.antigravityApp = Boolean(enabled);
+      if (enabled) state.settings.showAntigravity = true;
       const ag = state.providers[2]!;
       Object.assign(ag, enabled ? { status: { kind: "ready" }, usage: groups([86, 55], [24, 61]) } : { status: { kind: "needsConsent" }, usage: null });
       emit();
