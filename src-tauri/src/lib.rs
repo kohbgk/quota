@@ -9,6 +9,7 @@ pub mod providers;
 pub mod settings;
 pub mod shortcut;
 pub mod tray;
+pub mod updates;
 
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -27,6 +28,8 @@ pub fn run(start_hidden: bool) {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| overlay::show(app)))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![BACKGROUND_FLAG])))
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
             commands::update_settings,
@@ -41,6 +44,9 @@ pub fn run(start_hidden: bool) {
             commands::start_overlay_drag,
             commands::reset_overlay_position,
             commands::quit_app,
+            commands::check_for_updates,
+            commands::open_update_page,
+            commands::dismiss_update,
             commands::set_claude_usage_endpoint,
             commands::set_claude_status_line,
             commands::set_antigravity_app,

@@ -200,6 +200,15 @@ function renderBanners(s: AppSnapshot) {
         <button class="link" data-cmd="dismiss-hint">Got it</button>
       </div>`);
   }
+  const update = s.update.available;
+  if (update && s.settings.checkForUpdates && s.settings.dismissedUpdate !== update.version) {
+    parts.push(`
+      <div class="banner update">${icons.download}
+        <p>Quota ${escapeHtml(update.version)} is available.</p>
+        <button class="link" data-cmd="download-update">Download</button>
+        <button class="link subtle" data-cmd="dismiss-update">Later</button>
+      </div>`);
+  }
   if (actionError) {
     parts.push(`<div class="banner warn" role="alert">${icons.alert}<p>${escapeHtml(actionError)}</p></div>`);
   }
@@ -286,6 +295,12 @@ app.addEventListener("click", (e) => {
     case "dismiss-hint":
       hintDismissed = true;
       render();
+      break;
+    case "download-update":
+      void run(() => api.openUpdatePage());
+      break;
+    case "dismiss-update":
+      void run(() => api.dismissUpdate());
       break;
   }
 });

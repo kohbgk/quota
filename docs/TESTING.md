@@ -48,6 +48,13 @@ clippy and the build. These cover what only a real desktop can.
 - [ ] Wi-Fi off: cards dim with "Couldn't refresh · showing data from …"; recovering clears it.
 - [ ] Leave it a few hours: a window that reset shows "Reset since last update" until refreshed.
 
+**Updates**
+- [ ] With an older version installed: within a minute of starting, a Windows notification says a new
+      version is available (once per version), the overlay shows the bar, and the tray menu says
+      "Download Quota x.y.z…". **Download** opens the release page; **Later** hides the bar for that version.
+- [ ] Settings → General → Updates shows the version and "checked … ago"; **Check now** works; turning it
+      off stops the bar and the automatic checks.
+
 **Startup and uninstall**
 - [ ] Launch at startup on: Quota starts silently after sign-in. Off: it doesn't.
 - [ ] Quit Quota from the tray exits fully (no process left).

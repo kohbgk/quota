@@ -35,6 +35,9 @@ const defaults: Settings = {
   codexPath: null,
   onboarded: true,
   overlayPosition: null,
+  checkForUpdates: true,
+  notifiedUpdate: null,
+  dismissedUpdate: null,
 };
 
 /** Antigravity-style usage: model groups, each with a 5-hour and a weekly window. */
@@ -63,6 +66,7 @@ function scenario(name: string): AppSnapshot {
   let claude = provider("claude", { kind: "ready" }, usage(38, 81, "pro", "claudeUsageEndpoint", 40_000));
   let antigravity = provider("antigravity", { kind: "notInstalled" }, null);
   let shortcutError: string | null = null;
+  let update: AppSnapshot["update"] = { available: null, checkedAt: now() - 40 * 60_000, checking: false, error: null };
   let firstRun = false;
 
   switch (name) {
@@ -122,6 +126,9 @@ function scenario(name: string): AppSnapshot {
     case "blocked":
       codex.usage!.blocked = true;
       break;
+    case "update":
+      update = { ...update, available: { version: "0.3.0", url: "https://github.com/kohbgk/quota/releases/tag/v0.3.0" } };
+      break;
     case "antigravity":
       antigravity = provider("antigravity", { kind: "ready" }, groups([86, 55], [24, 61]));
       break;
@@ -152,7 +159,7 @@ function scenario(name: string): AppSnapshot {
       claude = provider("claude", { kind: "rateLimited", retryAt: now() + 4 * 60_000 }, usage(55, 70, "pro", "claudeUsageEndpoint", 9 * 60_000));
       break;
   }
-  return { settings, providers: [codex, claude, antigravity], shortcutError, launchAtStartup: true, version: "0.1.0", now: now(), firstRun };
+  return { settings, providers: [codex, claude, antigravity], shortcutError, launchAtStartup: true, version: "0.1.0", now: now(), firstRun, update };
 }
 
 export function createMockBackend(): Backend {
@@ -184,6 +191,19 @@ export function createMockBackend(): Backend {
       return shortcut;
     },
     pause_shortcut: () => undefined,
+    check_for_updates: () => {
+      state.update = { ...state.update, checking: true };
+      emit();
+      setTimeout(() => {
+        state.update = { ...state.update, checking: false, checkedAt: now() };
+        emit();
+      }, 900);
+    },
+    open_update_page: () => undefined,
+    dismiss_update: () => {
+      state.settings.dismissedUpdate = state.update.available?.version ?? null;
+      emit();
+    },
     start_overlay_drag: () => {
       state.settings.overlayPosition = { x: 0.8, y: 0.3, monitor: null };
       emit();

@@ -70,6 +70,11 @@ export interface Settings {
   onboarded: boolean;
   /** Where the user dragged the overlay; null for the default spot. */
   overlayPosition: { x: number; y: number; monitor: string | null } | null;
+  /** Look for new Quota releases and say when one is out. */
+  checkForUpdates: boolean;
+  notifiedUpdate: string | null;
+  /** The version whose "update available" bar was closed. */
+  dismissedUpdate: string | null;
 }
 
 export interface AppSnapshot {
@@ -80,6 +85,16 @@ export interface AppSnapshot {
   version: string;
   now: number;
   firstRun: boolean;
+  update: UpdateState;
+}
+
+export interface UpdateState {
+  /** A newer release, with the page to download it from. */
+  available: { version: string; url: string } | null;
+  /** Unix milliseconds of the last completed check. */
+  checkedAt: number | null;
+  checking: boolean;
+  error: string | null;
 }
 
 export type BridgeState =

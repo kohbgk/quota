@@ -13,6 +13,14 @@ const TRAY_ID: &str = "quota";
 
 struct TrayMenu {
     show: MenuItem<Wry>,
+    update: MenuItem<Wry>,
+}
+
+fn update_label(core: &Core) -> String {
+    match core.update_state().available {
+        Some(update) => format!("Download Quota {}…", update.version),
+        None => "Check for updates".into(),
+    }
 }
 
 fn show_label(shortcut: &str) -> String {
@@ -25,12 +33,21 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", show_label(&shortcut), true, None::<&str>)?;
     let refresh = MenuItem::with_id(app, "refresh", "Refresh now", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", update_label(&app.state::<Arc<Core>>()), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Quota", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[&show, &PredefinedMenuItem::separator(app)?, &refresh, &settings, &PredefinedMenuItem::separator(app)?, &quit],
+        &[
+            &show,
+            &PredefinedMenuItem::separator(app)?,
+            &refresh,
+            &settings,
+            &update,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
     )?;
-    app.manage(TrayMenu { show });
+    app.manage(TrayMenu { show, update });
 
     let icon = app.default_window_icon().cloned().expect("bundled icon");
     TrayIconBuilder::with_id(TRAY_ID)
@@ -42,6 +59,14 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             "show" => crate::overlay::show(app),
             "refresh" => app.state::<Arc<Core>>().refresh_all(Reason::Manual),
             "settings" => crate::overlay::open_settings(app, None),
+            "update" => {
+                let core = app.state::<Arc<Core>>();
+                if core.update_state().available.is_some() {
+                    crate::updates::open_release_page(app);
+                } else {
+                    core.check_for_updates();
+                }
+            }
             "quit" => {
                 crate::overlay::remember_position(app);
                 app.exit(0);
@@ -63,8 +88,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 
 pub fn update_menu(app: &AppHandle) {
     if let Some(menu) = app.try_state::<TrayMenu>() {
-        let shortcut = app.state::<Arc<Core>>().settings().shortcut;
-        let _ = menu.show.set_text(show_label(&shortcut));
+        let core = app.state::<Arc<Core>>();
+        let _ = menu.show.set_text(show_label(&core.settings().shortcut));
+        let _ = menu.update.set_text(update_label(&core));
     }
 }
 

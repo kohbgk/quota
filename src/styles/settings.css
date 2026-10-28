@@ -140,6 +140,23 @@ section.flash .group {
   color: var(--low);
 }
 
+/* Inline status text inside a description (Updates). */
+.item-desc .error {
+  color: var(--low);
+}
+
+.item-desc .accent {
+  color: var(--accent);
+  font-weight: 550;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
 .tag {
   font-size: 10.5px;
   font-weight: 600;

@@ -18,6 +18,9 @@ const settings: Settings = {
   claudeUsageEndpoint: true,
   claudeStatusLine: false,
   antigravityApp: true,
+  checkForUpdates: true,
+  notifiedUpdate: null,
+  dismissedUpdate: null,
   codexPath: null,
   onboarded: true,
   overlayPosition: null,
@@ -38,7 +41,7 @@ function p(id: ProviderState["id"], status: ProviderState["status"], u: Usage | 
 }
 
 function snap(providers: ProviderState[], overrides: Partial<Settings> = {}): AppSnapshot {
-  return { settings: { ...settings, ...overrides }, providers, shortcutError: null, launchAtStartup: true, version: "0", now: NOW, firstRun: false };
+  return { settings: { ...settings, ...overrides }, providers, shortcutError: null, launchAtStartup: true, version: "0", now: NOW, firstRun: false, update: { available: null, checkedAt: null, checking: false, error: null } };
 }
 
 const ready = () => [p("codex", { kind: "ready" }, usage(28, 55)), p("claude", { kind: "ready" }, usage(62, 19))];

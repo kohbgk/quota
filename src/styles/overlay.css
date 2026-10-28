@@ -84,6 +84,14 @@ body {
   color: var(--warn);
 }
 
+.banner.update .icon {
+  color: var(--accent);
+}
+
+.banner .link.subtle {
+  color: var(--text-3);
+}
+
 .banner p {
   margin: 0;
   flex: 1;

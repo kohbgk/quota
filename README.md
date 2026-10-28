@@ -34,6 +34,9 @@ you sign in to any of them.
   tray tooltip with what's left.
 - **Light and dark themes** that follow Windows by default; DPI-aware on mixed-scaling monitors.
 - **Light on resources.** Native Rust core with the system WebView2; no Electron.
+- **Tells you about new versions.** Quota checks GitHub every few hours. When a new release is out, you
+  get a notification and an "Update available" bar with a **Download** button that opens the release
+  page. Install it over your current version; your settings stay. You can turn the check off in Settings.
 
 ## Install
 
@@ -128,10 +131,13 @@ Open Settings from the overlay's sliders button, the tray menu, or <kbd>Ctrl</kb
 | Overlay | Show 5-hour limits, show weekly limits (at least one stays on); show Codex, Claude Code, Antigravity (at least one stays on) |
 | Shortcut | Record a new shortcut, or reset to the default |
 | Providers | Custom path to `codex.exe`; choose the Claude Code source(s); allow reading Antigravity's quota |
-| General | Launch at startup; hide when clicking outside; reset the overlay's position; theme (System, Light, Dark); refresh every 2, 5, or 15 minutes, or only when opened |
+| General | Launch at startup; hide when clicking outside; reset the overlay's position; check for updates (and check now); theme (System, Light, Dark); refresh every 2, 5, or 15 minutes, or only when opened |
 
 Quota also refreshes when you open the overlay if its data is more than a minute or two old, and
 backs off automatically when a provider is unavailable or asks it to slow down.
+
+Besides the providers above, Quota's only network request is the update check: it asks GitHub's
+public API for this repository's latest release, with no account and nothing about you or your usage.
 
 Settings and the last retrieved usage (no credentials) are kept in
 `%APPDATA%\com.kohbgk.quota\`.

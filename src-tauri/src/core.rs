@@ -14,6 +14,7 @@ use tauri::{AppHandle, Emitter};
 use crate::model::{ProviderId, ProviderState, ProviderStatus, Usage};
 use crate::paths::{self, now_ms};
 use crate::providers::{antigravity, claude, codex, statusline, ProviderError};
+use crate::updates::{self, UpdateState};
 use crate::settings::Settings;
 
 pub const STATE_EVENT: &str = "quota://state";
@@ -58,6 +59,7 @@ pub struct AppSnapshot {
     pub now: i64,
     /// True during the very first session, so the overlay can show a short hint.
     pub first_run: bool,
+    pub update: UpdateState,
 }
 
 pub struct Core {
@@ -70,6 +72,7 @@ pub struct Core {
     first_run: bool,
     /// Serializes usage cache writes.
     cache_lock: Mutex<()>,
+    update: Mutex<UpdateState>,
 }
 
 #[derive(Debug, Default)]
@@ -278,6 +281,8 @@ impl Core {
             launch_at_startup: AtomicBool::new(false),
             first_run,
             cache_lock: Mutex::new(()),
+            // The first check waits a little, so it never slows down startup.
+            update: Mutex::new(UpdateState { next_check_at: now_ms() + 20_000, ..Default::default() }),
         })
     }
 
@@ -307,7 +312,55 @@ impl Core {
             version: env!("CARGO_PKG_VERSION"),
             now: now_ms(),
             first_run: self.first_run,
+            update: self.update_state(),
         }
+    }
+
+    pub fn update_state(&self) -> UpdateState {
+        self.update.lock().unwrap().clone()
+    }
+
+    /// Looks for a newer release in the background (one check at a time).
+    pub fn check_for_updates(self: &Arc<Self>) {
+        {
+            let mut update = self.update.lock().unwrap();
+            if update.checking {
+                return;
+            }
+            update.checking = true;
+        }
+        self.emit_state();
+        let core = self.clone();
+        tauri::async_runtime::spawn(async move {
+            let result = updates::check().await;
+            let now = now_ms();
+            let found = {
+                let mut update = core.update.lock().unwrap();
+                update.checking = false;
+                update.checked_at = Some(now);
+                match result {
+                    Ok(available) => {
+                        update.available = available;
+                        update.error = None;
+                        update.next_check_at = now + updates::CHECK_EVERY_MS;
+                    }
+                    // Keep what's known; try again sooner than usual.
+                    Err(err) => {
+                        update.error = Some(err);
+                        update.next_check_at = now + 3_600_000;
+                    }
+                }
+                update.available.clone()
+            };
+            if let Some(update) = found {
+                if core.settings().notified_update.as_deref() != Some(update.version.as_str()) {
+                    updates::notify(&core.app, &update);
+                    let _ = core.modify_settings(|s| s.notified_update = Some(update.version.clone()));
+                }
+            }
+            crate::tray::update_menu(&core.app);
+            core.emit_state();
+        });
     }
 
     pub fn emit_state(&self) {
@@ -454,6 +507,10 @@ impl Core {
             loop {
                 ticker.tick().await;
                 core.poll_status_line();
+                let due = now_ms() >= core.update.lock().unwrap().next_check_at;
+                if due && core.settings().check_for_updates {
+                    core.check_for_updates();
+                }
                 let interval = core.settings().refresh_interval.seconds();
                 let overlay_visible = crate::overlay::is_visible(&core.app);
                 let mut announce = false;

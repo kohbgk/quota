@@ -30,6 +30,8 @@ pub fn update_settings(app: AppHandle, core: CoreState, settings: Settings) -> R
         antigravity_app: saved.antigravity_app,
         onboarded: saved.onboarded,
         overlay_position: saved.overlay_position.clone(),
+        notified_update: saved.notified_update.clone(),
+        dismissed_update: saved.dismissed_update.clone(),
         codex_path: settings.codex_path.as_ref().map(|p| p.trim().to_string()).filter(|p| !p.is_empty()),
         ..settings.clone()
     };
@@ -54,6 +56,9 @@ pub fn update_settings(app: AppHandle, core: CoreState, settings: Settings) -> R
     }
     if next.show_antigravity && !current.show_antigravity {
         core.clone().refresh(ProviderId::Antigravity, Reason::Startup);
+    }
+    if next.check_for_updates && !current.check_for_updates {
+        core.check_for_updates();
     }
     core.emit_state();
     Ok(core.snapshot())
@@ -119,6 +124,27 @@ pub fn start_overlay_drag(app: AppHandle) {
 #[tauri::command]
 pub fn reset_overlay_position(app: AppHandle) {
     crate::overlay::reset_position(&app);
+}
+
+#[tauri::command]
+pub fn check_for_updates(core: CoreState) {
+    core.check_for_updates();
+}
+
+/// Opens the release page of the update Quota found (never a URL from the page).
+#[tauri::command]
+pub fn open_update_page(app: AppHandle) {
+    crate::updates::open_release_page(&app);
+}
+
+/// Hides the "update available" bar for this version.
+#[tauri::command]
+pub fn dismiss_update(core: CoreState) -> Result<(), String> {
+    let Some(version) = core.update_state().available.map(|u| u.version) else { return Ok(()) };
+    core.modify_settings(|s| s.dismissed_update = Some(version))
+        .map_err(|_| "Couldn't save settings.".to_string())?;
+    core.emit_state();
+    Ok(())
 }
 
 #[tauri::command]

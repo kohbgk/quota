@@ -2,7 +2,7 @@ import "./styles/tokens.css";
 import "./styles/settings.css";
 
 import { api, errorText } from "./lib/api";
-import { escapeHtml, planLabel, shortcutKeys, shortenPath } from "./lib/format";
+import { escapeHtml, formatAgo, planLabel, shortcutKeys, shortenPath } from "./lib/format";
 import { icons, logo } from "./lib/icons";
 import { afterRender } from "./lib/frame";
 import { recordKey } from "./lib/keys";
@@ -132,6 +132,11 @@ app.innerHTML = `
           ${item("Launch at startup", "Start Quota quietly when you sign in to Windows", sw("launchAtStartup", "Launch at startup"))}
           ${item("Hide when clicking outside", "Dismiss the overlay when it loses focus", sw("hideOnBlur", "Hide when clicking outside"))}
           ${item("Position", '<span id="positionDesc"></span>', '<button class="btn secondary" id="resetPosition">Reset</button>')}
+          ${item(
+            "Updates",
+            '<span id="updatesDesc"></span>',
+            `<div class="controls"><button class="btn secondary" id="updateAction">Check now</button>${sw("checkForUpdates", "Check for new versions automatically")}</div>`,
+          )}
           ${item(
             "Appearance",
             "Follow Windows or pick a theme",
@@ -292,7 +297,26 @@ function render() {
     ? "Quota opens where you last dragged it"
     : "Drag the overlay anywhere to move it; Quota remembers the spot";
   $<HTMLButtonElement>("resetPosition").disabled = !s.overlayPosition;
+  renderUpdates();
   $("version").textContent = snapshot.version;
+}
+
+function renderUpdates() {
+  if (!snapshot) return;
+  const { update, version, settings: s } = snapshot;
+  const desc = $("updatesDesc");
+  const action = $<HTMLButtonElement>("updateAction");
+  setSwitch("checkForUpdates", s.checkForUpdates);
+  desc.classList.toggle("accent", Boolean(update.available));
+  desc.classList.toggle("error", Boolean(update.error) && !update.available);
+  action.textContent = update.available ? "Download" : "Check now";
+  action.disabled = update.checking;
+  if (update.checking) desc.textContent = "Checking for updates…";
+  else if (update.available) desc.textContent = `Quota ${update.available.version} is available (you have ${version})`;
+  else if (update.error) desc.textContent = update.error;
+  else if (update.checkedAt) desc.textContent = `You have the latest version (${version}) · checked ${formatAgo(update.checkedAt, Date.now())}`;
+  else if (s.checkForUpdates) desc.textContent = `Version ${version} · Quota looks for new versions every few hours`;
+  else desc.textContent = `Version ${version} · automatic checks are off`;
 }
 
 async function loadDetails() {
@@ -370,6 +394,7 @@ const toggles: Record<string, (on: boolean) => Promise<unknown>> = {
       if (snapshot) snapshot = { ...snapshot, launchAtStartup: actual };
     }),
   showAntigravity: (on) => saveSettings({ showAntigravity: on }),
+  checkForUpdates: (on) => saveSettings({ checkForUpdates: on }),
   antigravityApp: (on) =>
     withBusy("antigravityApp", async () => {
       adopt(await api.setAntigravityApp(on));
@@ -402,6 +427,14 @@ document.querySelectorAll<HTMLButtonElement>("#theme button").forEach((b) =>
 $<HTMLSelectElement>("refreshInterval").addEventListener("change", (e) =>
   void saveSettings({ refreshInterval: (e.target as HTMLSelectElement).value as RefreshInterval }),
 );
+
+$("updateAction").addEventListener("click", async () => {
+  try {
+    await (snapshot?.update.available ? api.openUpdatePage() : api.checkForUpdates());
+  } catch (err) {
+    toast(errorText(err), true);
+  }
+});
 
 $("resetPosition").addEventListener("click", async () => {
   try {

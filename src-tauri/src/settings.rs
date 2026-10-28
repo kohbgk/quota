@@ -89,6 +89,12 @@ pub struct Settings {
     pub onboarded: bool,
     /// Where the user moved the overlay; `None` uses the default spot.
     pub overlay_position: Option<OverlayPosition>,
+    /// Look for new Quota releases on GitHub and say when one is out.
+    pub check_for_updates: bool,
+    /// The newest version a notification was already shown for.
+    pub notified_update: Option<String>,
+    /// The version whose "update available" bar the user closed.
+    pub dismissed_update: Option<String>,
 }
 
 impl Default for Settings {
@@ -109,6 +115,9 @@ impl Default for Settings {
             codex_path: None,
             onboarded: false,
             overlay_position: None,
+            check_for_updates: true,
+            notified_update: None,
+            dismissed_update: None,
         }
     }
 }
