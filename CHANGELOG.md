@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.1]
+
+Quota now tells you when there's a new version.
+
+**Downloads**
+
+- `Quota_0.2.1_x64-setup.exe`: installer for Windows 10/11 (per-user, no admin needed). Recommended.
+- `Quota_0.2.1_x64-portable.exe`: a single executable. Needs WebView2, which Windows 11 and most
+  Windows 10 PCs already have.
+- `SHA256SUMS.txt`: checksums for both.
+
+The builds aren't code-signed yet, so Windows SmartScreen may warn on first run: choose
+*More info* → *Run anyway*.
+
+**New**
+
+- **Update notices.** Quota checks for a new release shortly after it starts and every few hours.
+  When there is one, you get a Windows notification and an "Update available" bar in the overlay.
+  **Download** opens the release page to install it; **Later** hides the bar until the next version.
+  The tray menu also offers the download.
+- Settings → General → **Updates** shows your version, has **Check now**, and can turn the checks off.
+- The check asks GitHub's public releases API for this repository only. No account, and nothing
+  about you or your usage is sent.
+
+This is the last version you need to find by yourself: from here on, Quota tells you.
+
 ## [0.2.0]
 
 Antigravity support.

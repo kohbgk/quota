@@ -145,13 +145,24 @@ from the sandbox); verified with a stand-in server (`cargo test -- --ignored liv
 runs). Alternative not taken: `agy -p /usage --output-format json` (agy ≥ 1.1.11). It's heavier
 and may open a sign-in browser on Windows, but it's the fallback if the local server changes.
 
+**v0.2.1 — update notices** (owner chose a notice over self-installing updates, so no signing
+key is needed): `updates.rs` checks `api.github.com/repos/kohbgk/quota/releases/latest` about 20s
+after start and every 6h (1h after a failure). A newer `vX.Y.Z` → notification once per version
+(`settings.notified_update`, tauri-plugin-notification), an overlay bar (Download / Later →
+`settings.dismissed_update`) and a tray item. Download opens only this repo's release page
+(tauri-plugin-opener, from Rust; the URL never comes from the page). Off switch:
+`settings.check_for_updates`. Verified live: a build stamped 0.1.9 found v0.2.0 and showed the bar;
+Later saved the dismissal. Self-installing updates (tauri-plugin-updater) would need a signing
+key added as a GitHub secret by the owner.
+
 Remaining:
 
 1. **Manual Windows testing by the user** with `docs/TESTING.md`, especially the Antigravity
    items (first check against real Antigravity). Fix whatever it turns up;
    for a fix release bump the version in all three files, add a CHANGELOG section, and
    run the Release workflow on main.
-2. Code signing would remove the SmartScreen warning (needs a certificate from the user).
+2. Optional: self-installing updates (needs the owner's signing key, see above).
+3. Code signing would remove the SmartScreen warning (needs a certificate from the user).
 
 ## Working in this repo
 
